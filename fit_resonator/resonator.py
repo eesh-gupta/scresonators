@@ -11,7 +11,6 @@ import fit_resonator.fit as fit
 # import cavity_functions as ff
 # import fit as fit
 
-
 class FitMethod(object):
     """
     Container for data related to fitting method
@@ -146,6 +145,8 @@ class Resonator:  # Object is auto-initialized with @attr annotation
     """
 
     filepath: str = None
+    filename: str = None
+    outputpath: str = None 
     data: ResonatorData = None
     databg: ResonatorData = None
     method_class: FitMethod = None

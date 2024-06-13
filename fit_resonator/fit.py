@@ -41,6 +41,7 @@ def extract_near_res(x_raw: np.ndarray,
     Returns:
         Extracted spectrum kappa about f_res.
     """
+    
     # starting resonance to add to fit
     xstart = f_res - extract_factor / 2 * kappa
     # final resonance to add to fit
@@ -397,6 +398,7 @@ def find_nearest(array, value):
     idx = (np.abs(array - value)).argmin()
     val = array[idx]
     return val, idx
+
 
 def monte_carlo_fit(xdata=None, ydata=None, parameter=None, Method=None):
     # check if all parameters are defined
@@ -793,7 +795,6 @@ def min_fit(params, xdata, ydata, Method):
             minner = lmfit.Minimizer(ff.min_one_Cavity_inverse, params, fcn_args=(xdata, ydata))
         elif Method.method == 'CPZM':
             minner = lmfit.Minimizer(ff.min_one_Cavity_CPZM, params, fcn_args=(xdata, ydata))
-
         else:
             print(">Method is not defined. Please choose a method: DCM, ",
                   "DCM REFLECTION, PHI, INV or CPZM")
@@ -868,6 +869,8 @@ def min_fit(params, xdata, ydata, Method):
                 if np.isinf(phi_conf):
                     phi_conf = min(np.abs(ci['phi'][1][1] - ci['phi'][0][1]), 
                                    np.abs(ci['phi'][1][1] - ci['phi'][2][1]))
+                if phi_conf>np.pi: 
+                    phi_conf = np.pi
             else:
                 phi_conf = 0
             # confidence interval for resonance frequency
@@ -1007,7 +1010,11 @@ def fit(resonator):
         print("When trying to read data")
         quit()
 
-    output_path = fp.name_folder(dir, str(Method.method))
+    if resonator.outputpath is None: 
+        output_path = fp.name_folder(dir, str(Method.method))
+    else:
+        output_path = resonator.outputpath
+
     if plot_extra:
         os.mkdir(output_path)
 
@@ -1131,6 +1138,7 @@ def fit(resonator):
     xdata, ydata = extract_near_res(x_raw, y_raw, freq, kappa,
                                     extract_factor=1)  # xdata is new set of data to be fit, within extract_factor
     # times the bandwidth, ydata is S21 data to match indices with xdata
+    
 
     if Method.method == 'INV':
         ydata = ydata ** -1  # Inverse S21
@@ -1144,10 +1152,10 @@ def fit(resonator):
         # vary = boolean to determine if parameter varies during fit
         params = lmfit.Parameters()
         if Method.method == 'DCM' or Method.method == 'DCM REFLECTION' or Method.method == 'PHI':
-            params.add('Q', value=init[0], vary=change_Q, min=init[0] * 0.5, max=init[0] * 1.5)
+            params.add('Q', value=init[0], vary=change_Q, min=init[0] * 0.3, max=init[0] * 2)
         elif Method.method == 'INV' or Method.method == 'CPZM':
             params.add('Qi', value=init[0], vary=change_Qi, min=init[0] * 0.8, max=init[0] * 1.2)
-        params.add('Qc', value=init[1], vary=change_Qc, min=init[1] * 0.8, max=init[1] * 1.2)
+        params.add('Qc', value=init[1], vary=change_Qc, min=init[1] * 0.5, max=init[1] * 1.5)
         params.add('w1', value=init[2], vary=change_w1, min=init[2] * 0.9, max=init[2] * 1.1)
         if Method.method == 'CPZM':
             params.add('Qa', value=init[3], vary=change_Qa, min=-init[3] * 1.1, max=init[3] * 1.1)
@@ -1159,6 +1167,7 @@ def fit(resonator):
         quit()
 
     # Fit data to least squares fit for respective fit type
+
     fit_params, conf_array = min_fit(params, xdata, ydata, Method)
 
     if manual_init is None and fit_params is None:
@@ -1194,6 +1203,7 @@ def fit(resonator):
 
     # if monte carlo fit got better results than initial minimization, run a minimization on the monte carlo parameters
     if output_params[0] != fit_params[0]:
+        print('monte carlo')
         params2 = lmfit.Parameters()  # initialize parameter class, min is lower bound, max is upper bound, vary = boolean to determine if parameter varies during fit
         if Method.method == 'DCM' or Method.method == 'DCM REFLECTION' or Method.method == 'PHI':
             params2.add('Q', value=output_params[0], vary=change_Q, min=output_params[0] * 0.5,
@@ -1248,18 +1258,20 @@ def fit(resonator):
         # plot fit
         try:
             #title = f'{Method.method} fit for {filename}'
-            title = f'{Method.method} Method Fit'
-            figurename = f"{Method.method} with Monte Carlo Fit and Raw data\nPower: {filename}"
+            title = f'{Method.method} Method Fit: {resonator.filename}' 
+            figurename = f"{Method.method} with Monte Carlo Fit and Raw data\nPower: {resonator.filename}"
+            #x_raw = xdata 
+            #y_raw = ydata
             fig = fp.PlotFit(x_raw, y_raw, x_initial, y_initial, slope, intercept, 
                         slope2, intercept2, output_params, Method, 
-                        error, figurename, x_c, y_c, r, output_path, conf_array, 
+                        error, figurename, x_c, y_c, r, output_path, conf_array, xdata, ydata, 
                         extract_factor, title=title, manual_params=Method.manual_init)
         except Exception as e:
             print(f'Exception: {e}')
             print(f'Failed to plot {Method.method} fit for {data}')
             quit()
         try:
-            fig.savefig(fp.name_plot(filename, str(Method.method), output_path, 
+            fig.savefig(fp.name_plot(resonator.filename, str(Method.method), output_path, 
                                     format=f'.{resonator.plot}'), format=f'{resonator.plot}')
         except: 
             print(f'Unrecognized file format: {resonator.plot}\n Please use png, pdf, ps, eps or svg.')

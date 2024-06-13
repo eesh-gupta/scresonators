@@ -39,7 +39,7 @@ MC_iteration = 10
 MC_rounds = 1e3
 MC_fix = []
 manual_init = None
-my_resonator.preprocess_method = 'circle' # Preprocess method: default = linear
+my_resonator.preprocess_method = 'linear' # Preprocess method: default = linear
 my_resonator.filepath = './' # Path to fit output
 
 # Perform a fit on the data with given parameters

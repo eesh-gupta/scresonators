@@ -13,16 +13,17 @@ import fit_resonator.cavity_functions as ff
 
 # import fit as fit
 # import cavity_functions as ff
-
-params = {'legend.fontsize': 20,
+fontsize = 12 
+textsize = 10
+params = {'legend.fontsize': fontsize,
           'figure.figsize': (10, 8),
-          'axes.labelsize': 20,
-          'axes.titlesize': 20,
-          'xtick.labelsize': 20,
-          'ytick.labelsize': 20,
+          'axes.labelsize': fontsize,
+          'axes.titlesize': fontsize,
+          'xtick.labelsize': fontsize,
+          'ytick.labelsize': fontsize,
           'lines.markersize': 1,
-          'lines.linewidth': 2,
-          'font.size': 20
+          'lines.linewidth': 2.5,
+          'font.size': fontsize
           }
 
 plt.rcParams.update(params)
@@ -44,7 +45,7 @@ def plot(x,
          p_y=None):
     # plot any given set of x and y data
     fig = plt.figure('raw_data', figsize=(10, 10))
-    gs = GridSpec(2, 2)
+    gs = GridSpec(2, 4)
     ax = plt.subplot(gs[0:2, 0:2])  ## plot
     # plot axies
     ax.plot(x, y, 'bo', label='raw data', markersize=3)
@@ -129,14 +130,16 @@ def PlotFit(x,
             radius,
             output_path,
             conf_array,
+            xlim, 
+            ylim,
             extract_factor=None,
             title="Fit",
             manual_params=None,
             dfac: int = 1,
-            msizes: list = [12, 24],
+            msizes: list = [2, 4],
             xstr: str = r'$(f-f_c)$ [kHz]',
             fscale: float = 1e3,
-            fsize: float = 20.):
+            fsize: float = fontsize):
     """
     Plots data and outputs fit parameters to a file
 
@@ -158,7 +161,7 @@ def PlotFit(x,
         x_c: center x coordinate for fit circle
         y_c: center y coordinate for fit circle
         radius: radius of fit circle
-        output_path: file path where the plots will be saved
+        output__path: file path where the plots will be saved
         conf_array: array with 95% confidence interval values
         extract_factor: contains starting and ending frequency values
         title: title the plot will have
@@ -186,12 +189,12 @@ def PlotFit(x,
     # S21 data for graphing
     y_fit = func(x_fit, *params)
 
-    fig = plt.figure(figurename, figsize=(18, 12))
+    fig = plt.figure(figurename)#, figsize=(18, 12))
     gs = GridSpec(11, 10)
     ax0 = plt.subplot(gs[1:10, 0:6])
     ax1 = plt.subplot(gs[0:4, 7:10])
     ax2 = plt.subplot(gs[4:8, 7:10])
-    fig.set_tight_layout(True)
+    #fig.set_tight_layout(True)
 
     # Marker sizes
     msize1, msize2 = msizes
@@ -256,10 +259,11 @@ def PlotFit(x,
     # Plot the resonance circle
     phi = params[3]
     ph = 1. # np.exp(1j*phi)
-    ax0.plot(np.real(y*ph), np.imag(y*ph), 'bo', label='normalized data',
-            markersize=msize1)
+    ax0.plot(np.real(y*ph), np.imag(y*ph), 'o', label='Normalized data',
+            markersize=msize1, color='#8c000f')
     ax0.plot(np.real(y_fit*ph), np.imag(y_fit*ph), 'cadetblue',
-            label='fit function', linewidth=4)
+            label='Fit function')
+    
     ax0.axhline(y=0., color='k')
     ax0.axvline(x=1., color='k')
 
@@ -269,27 +273,27 @@ def PlotFit(x,
     else:
         ax0.set_ylabel(r'Im[$S_{21}$]')
         ax0.set_xlabel(r'Re[$S_{21}$]')
-    leg = ax0.legend(loc="upper left", fancybox=True, shadow=True, fontsize=20)
+    leg = ax0.legend(loc="upper left", fancybox=True, fontsize=fontsize)
     #ax0.set_xlim([None, 1.1])
     #ax0.set_ylim([-1, 1])
     ax0.set_aspect(1.)
 
     # Subtract the resonance to label as f-f0
-    ax1.plot((x-params[2]) / fscale, np.log10(np.abs(y)) * 20, 'bo',
-            label='normalized data', markersize=msize1)
+    ax1.plot((x-params[2]) / fscale, np.log10(np.abs(y)) * 20, 'o',
+            label='Normalized data', markersize=msize1, color='#8c000f')
     ax1.plot((x_fit-params[2]) / fscale, np.log10(np.abs(y_fit)) * 20,
-            color='cadetblue', lw=4, label='fit function')
+            color='cadetblue', label='Fit function')
     ax1.set_xlim(left=(x[0]-params[2]) / fscale,
                  right=(x[-1]-params[2]) / fscale)
     ax1.set_xlabel(xstr)
 
-    for tick in ax1.xaxis.get_major_ticks():
-        tick.label.set_fontsize(fsize)
+#    for tick in ax1.xaxis.get_major_ticks():
+#        tick.set_fontsize(fsize)
 
-    ax2.plot((x - params[2]) / fscale, np.angle(y), 'bo', 
-        label='normalized data', markersize=msize1)
+    ax2.plot((x - params[2]) / fscale, np.angle(y), 'o', 
+        label='normalized data', markersize=msize1, color='#8c000f')
     ax2.plot((x_fit - params[2]) / fscale, np.angle(y_fit),
-            color='cadetblue', label='fit function', lw=4)
+            color='cadetblue', label='fit function')
     ax2.set_xlim(left=(x[0] - params[2]) / fscale,
             right=(x[-1] - params[2]) / fscale)
     ax2.set_xlabel(xstr)
@@ -307,19 +311,37 @@ def PlotFit(x,
         resonance = 1 / (1 + params[1] + 1j * params[3])
     else:
         resonance = 1 + 1j * 0
-    ax0.plot(np.real(resonance), np.imag(resonance), '*', color='darkorange', 
-            label= 'resonance', markersize=msize2)
-    ax1.plot(0, np.log10(np.abs(resonance)) * 20, '*', color='darkorange', 
+        #markerfacecolor='none',
+    ax0.plot(np.real(resonance), np.imag(resonance), 'o', color='#fac205', 
+            label= 'resonance', markersize=2*msize2)
+    ax1.plot(0, np.log10(np.abs(resonance)) * 20, 'o', color='#fac205', 
              label='resonance', markersize=msize2)
-    ax2.plot(0, np.angle(resonance), '*', color='darkorange',
+    ax2.plot(0, np.angle(resonance), 'o', color='#fac205',
+            label= 'resonance', markersize=msize2)
+    
+    ax0.plot(np.real(ylim[0]), np.imag(ylim[0]), 'o', color='#fac205', 
+            label= 'resonance', markersize=2*msize2)
+    ax1.plot((xlim[0]-params[2])/fscale, np.log10(np.abs(ylim[0])) * 20, 'o', color='#fac205', 
+             label='resonance', markersize=msize2)
+    ax2.plot((xlim[0]-params[2])/fscale, np.angle(ylim[0]), 'o', color='#fac205',
+            label= 'resonance', markersize=msize2)
+    
+    
+
+    ax0.plot(np.real(ylim[-1]), np.imag(ylim[-1]), 'o', color='#fac205', 
+            label= 'resonance', markersize=2*msize2)
+    ax1.plot((xlim[-1]-params[2])/fscale, np.log10(np.abs(ylim[-1])) * 20, 'o', color='#fac205', 
+             label='resonance', markersize=msize2)
+    ax2.plot((xlim[-1]-params[2])/fscale, np.angle(ylim[-1]), 'o', color='#fac205',
             label= 'resonance', markersize=msize2)
 
-    for tick in ax2.xaxis.get_major_ticks():
-        tick.label.set_fontsize(fsize)
+
+#    for tick in ax2.xaxis.get_major_ticks():
+#        tick.label.set_fontsize(fsize)
 
     # get the individual lines inside legend and set line width
     for line in leg.get_lines():
-        line.set_linewidth(10)
+        line.set_linewidth(6)
 
     try:
         if params:
@@ -355,7 +377,7 @@ def PlotFit(x,
                     '{0:.1g}'.format(conf_array[2])) + ' radians' + \
                           '\n' + r'$f_c$ = ' + '%s' % float('{0:.10g}'.format(f_c / fcscale)) + r"$\pm$" + '%s' % float(
                     '{0:.1g}'.format(conf_array[3])) + ' GHz'
-                plt.gcf().text(0.7, 0.11, textstr, fontsize=18)
+                plt.gcf().text(0.7, 0.11, textstr, fontsize=textsize)
             elif func == ff.cavity_CPZM:
                 if params[0] < 0:
                     print("Qi is less than zero. Please make sure data is "
@@ -383,13 +405,13 @@ def PlotFit(x,
                 else:
                     f_c = params[2]
                 reports = ['$Q_i$', '$Q_c$', '$Q_a$', '$f_c$']
-                p_ref = [Qi, Qc, Qa, f_c]
+                p_ref = [Qi, Qc, Qa, f_c/1e6]
                 textstr = ''
 
                 for val in reports:
-                    textstr += val + f' = {p_ref[reports.index(val)]:.10f}' + r'$\pm$' + f'{conf_array[reports.index(val)]:.1f} UNITS'
+                    textstr += val + f' = {p_ref[reports.index(val)]:.5f}' + r'$\pm$' + f'{conf_array[reports.index(val)]:.1f}' + '\n'
 
-                plt.gcf().text(0.7, 0.11, textstr, fontsize=18)
+                plt.gcf().text(0.7, 0.11, textstr, fontsize=textsize)
 
             else:
                 Qc = params[1] / np.exp(1j * params[3])
@@ -397,6 +419,11 @@ def PlotFit(x,
                     Qi = (params[0] ** -1 - np.abs(Qc ** -1)) ** -1
                 else:
                     Qi = (params[0] ** -1 - np.real(Qc ** -1)) ** -1
+                    #print(Qi)
+                    
+                    #Qi2 = (params[0] ** -1 - np.abs(Qc ** -1)) ** -1
+                    #print(Qi2)
+
 
                 if Qi < 0 and Method.method != 'DCM REFLECTION':
                     print(
@@ -437,10 +464,10 @@ def PlotFit(x,
                         '{0:.2g}'.format(conf_array[4])) + ' radians' + \
                               '\n' + r'$qqqf_c$ = ' + '%s' % float('{0:.7g}'.format(f_c / fcscale)) + r"$\pm$" + '%s' % float(
                         '{0:.1g}'.format(conf_array[5])) + ' GHz'
-                    plt.gcf().text(0.7, 0.09, textstr, fontsize=18)
+                    plt.gcf().text(0.7, 0.09, textstr, fontsize=textsize)
                     Qc_str = r'1/Re[1/$Q_c$] = ' + '%s' % float('{0:.10g}'.format(Qc_Re)) + r"$\pm$" + '%s' % float(
                         '{0:.1g}'.format(conf_array[3]))
-                    plt.gcf().text(0.7, 0.245, Qc_str, fontsize=18, color='red')
+                    plt.gcf().text(0.7, 0.245, Qc_str, fontsize=textsize, color='red')
 
                 else:
                     if conf_array[0] > 10 ** -10 and conf_array[0] != float('inf'):
@@ -468,8 +495,8 @@ def PlotFit(x,
                     else:
                         f_c = params[2]
 
-                    reports = ['Q', r'$Q_i$', r'$Q_c$', r'$\phi$', r'$f_c$']
-                    p_ref = [Q, Qi, Qc, phi, f_c]
+                    reports = ['Q', r'$Q_i$', r'$Q_c$', r'$Re(Q_c)$', r'$\phi$', r'$f_c$']
+                    p_ref = [Q, Qi, Qc,Qc_Re, phi, f_c]
 
 
                     textstr = ''
@@ -485,7 +512,10 @@ def PlotFit(x,
 
                         # Report the uncertainties using the LaTeX format
                         un = uncertainties.ufloat(v, err)
-                        latexstr = f'{un:L}'
+                        if val== r'$f_c$':
+                            latexstr = f'{un:.05g}'
+                        else:
+                            latexstr = f'{un:L}'
                         textstr += r'%s: $%s$' % (val, latexstr)
 
                         # if conf_array[reports.index(val)] > 0:
@@ -495,7 +525,7 @@ def PlotFit(x,
                         elif val == r'$f_c$':
                             textstr += ' GHz'
                         textstr += '\n'
-                    plt.gcf().text(0.63, 0.05, textstr, fontsize=20)
+                    plt.gcf().text(0.63, 0.05, textstr, fontsize=fontsize)
 
             # write to output csv file
             with open(output_path + "fit_params.csv", "w", newline='') as file:
