@@ -1257,24 +1257,22 @@ def fit(resonator):
 
         # plot fit
         try:
-            #title = f'{Method.method} fit for {filename}'
+            
             title = f'{Method.method} Method Fit: {resonator.filename}' 
             figurename = f"{Method.method} with Monte Carlo Fit and Raw data\nPower: {resonator.filename}"
             #x_raw = xdata 
-            #y_raw = ydata
+            #y_raw = ydata]
             fig = fp.PlotFit(x_raw, y_raw, x_initial, y_initial, slope, intercept, 
                         slope2, intercept2, output_params, Method, 
                         error, figurename, x_c, y_c, r, output_path, conf_array, xdata, ydata, 
                         extract_factor, title=title, manual_params=Method.manual_init)
         except Exception as e:
-            print(f'Exception: {e}')
-            print(f'Failed to plot {Method.method} fit for {data}')
-            quit()
+           print(f'Exception: {e}')
+           print(f'Failed to plot {Method.method} fit for {data}')
         try:
             fig.savefig(fp.name_plot(resonator.filename, str(Method.method), output_path, 
                                     format=f'.{resonator.plot}'), format=f'{resonator.plot}')
         except: 
             print(f'Unrecognized file format: {resonator.plot}\n Please use png, pdf, ps, eps or svg.')
-            quit()
     
     return output_params, conf_array, error, init

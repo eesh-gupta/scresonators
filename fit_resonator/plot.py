@@ -16,12 +16,10 @@ import fit_resonator.cavity_functions as ff
 fontsize = 12 
 textsize = 10
 params = {'legend.fontsize': fontsize,
-          'figure.figsize': (10, 8),
           'axes.labelsize': fontsize,
           'axes.titlesize': fontsize,
           'xtick.labelsize': fontsize,
           'ytick.labelsize': fontsize,
-          'lines.markersize': 1,
           'lines.linewidth': 2.5,
           'font.size': fontsize
           }
@@ -135,8 +133,8 @@ def PlotFit(x,
             extract_factor=None,
             title="Fit",
             manual_params=None,
-            dfac: int = 1,
-            msizes: list = [2, 4],
+            dfac: int = 10,
+            msizes: list = [4, 4],
             xstr: str = r'$(f-f_c)$ [kHz]',
             fscale: float = 1e3,
             fsize: float = fontsize):
@@ -189,7 +187,7 @@ def PlotFit(x,
     # S21 data for graphing
     y_fit = func(x_fit, *params)
 
-    fig = plt.figure(figurename)#, figsize=(18, 12))
+    fig = plt.figure(figurename, figsize=(10, 8))
     gs = GridSpec(11, 10)
     ax0 = plt.subplot(gs[1:10, 0:6])
     ax1 = plt.subplot(gs[0:4, 7:10])
