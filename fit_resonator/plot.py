@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Circle
 import time
-from git import Repo
+#from git import Repo
 import csv
 import os
 import uncertainties
@@ -20,7 +20,6 @@ params = {'legend.fontsize': fontsize,
           'axes.titlesize': fontsize,
           'xtick.labelsize': fontsize,
           'ytick.labelsize': fontsize,
-          'lines.linewidth': 2.5,
           'font.size': fontsize
           }
 
@@ -93,23 +92,24 @@ def name_folder(dir, strmethod):
     return output_path
 
 def create_metadata(Method, output_path):
-    repo = Repo(fit.ROOT_DIR)
-    sha = repo.head.object.hexsha
-    # write input parameters to metadata file
-    with open(output_path + "metadata.csv", "w", newline='') as file:
-        writer = csv.writer(file)
-        fields = ['Method', 'MC_iteration', 'MC_rounds',
-                  'MC_weight', 'MC_weightvalue', 'MC_fix',
-                  'MC_step_const', 'manual_init',
-                  'preprocess_method', 'Current Git Commit']
-        vals = [Method.method, Method.MC_iteration, 
-                Method.MC_rounds,Method.MC_weight, 
-                Method.MC_weightvalue, Method.MC_fix,
-                Method.MC_step_const, Method.manual_init,
-                Method.preprocess_method, sha]
-        writer.writerow(fields)
-        writer.writerow(vals)
-        file.close()
+    x=10
+    #repo = Repo(fit.ROOT_DIR)
+    # sha = repo.head.object.hexsha
+    # # write input parameters to metadata file
+    # with open(output_path + "metadata.csv", "w", newline='') as file:
+    #     writer = csv.writer(file)
+    #     fields = ['Method', 'MC_iteration', 'MC_rounds',
+    #               'MC_weight', 'MC_weightvalue', 'MC_fix',
+    #               'MC_step_const', 'manual_init',
+    #               'preprocess_method', 'Current Git Commit']
+    #     vals = [Method.method, Method.MC_iteration, 
+    #             Method.MC_rounds,Method.MC_weight, 
+    #             Method.MC_weightvalue, Method.MC_fix,
+    #             Method.MC_step_const, Method.manual_init,
+    #             Method.preprocess_method, sha]
+    #     writer.writerow(fields)
+    #     writer.writerow(vals)
+    #     file.close()
 
 def PlotFit(x,
             y,
@@ -133,7 +133,7 @@ def PlotFit(x,
             extract_factor=None,
             title="Fit",
             manual_params=None,
-            dfac: int = 10,
+            dfac: int = 1,
             msizes: list = [4, 4],
             xstr: str = r'$(f-f_c)$ [kHz]',
             fscale: float = 1e3,
