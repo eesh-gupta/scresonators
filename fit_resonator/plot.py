@@ -524,7 +524,8 @@ def PlotFit(x,
                             textstr += ' GHz'
                         textstr += '\n'
                     plt.gcf().text(0.63, 0.05, textstr, fontsize=fontsize)
-
+            
+            plt.show()
             # write to output csv file
             with open(output_path + "fit_params.csv", "w", newline='') as file:
                 writer = csv.writer(file)

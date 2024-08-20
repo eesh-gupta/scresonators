@@ -116,24 +116,28 @@ def plot_res_pars(params_list, labs, base_pth):
     fig, ax = plt.subplots(2,3, figsize=(10,6), sharex=True)
     ax = ax.flatten()
     fnames = ''
-    
+    i=0
     for params, l in zip(params_list,labs):
+
         fnames += params['res_name']+'_'
         ax[0].errorbar(params['pitch'], params['qc']/1e6, yerr=params['qc_err']/1e6, fmt='.',label=l)
         ax[1].errorbar(params['pitch'], params['qtls0']/1e6,yerr=params['qtls0_err']/1e6, fmt='.')
         ax[2].errorbar(params['pitch'], params['qother']/1e6,yerr=params['qother_err']/1e6, fmt='.')
         ax[3].errorbar(params['pitch'], params['nc'], yerr=params['nc_err'], fmt='.')
         ax[4].errorbar(params['pitch'], params['beta'], yerr=params['beta_err'], fmt='.')
-        ax[5].plot(params['pitch'], params['qi0']/params['qc'], '.', label=l)
-        ax[5].plot(params['pitch'], params['qi_hi']/params['qc'], '.', label=l)
+        for j in range(len(params['pitch'])):
+            ax[5].plot((params['pitch'][j],params['pitch'][j]), (params['qi0'][j]/params['qc'][j],params['qi_hi'][j]/params['qc'][j]), '.-', label=l, color=colors[i])
+        #ax[5].plot((params['pitch'],(params['pitch']), params['qi0']/params['qc'],params['qi_hi']/params['qc']), '.-', label=l, color=colors[i])
+        #ax[5].plot(params['pitch'], params['qi_hi']/params['qc'], '.', label=l, color=colors[i])
+
         if ax[2].get_ylim()[1]>30: 
             ax[2].set_ylim(0,np.nanmax(params['qother']/1e6)*1.1)
         #ax[1].set_ylim(0,np.nanmax(params['qtls0']/1e6)*1.1)
-
         
         if ax[2].get_ylim()[1]>13: 
              ax[2].set_ylim(0,np.nanmax(params['qother']/1e6)*1.2)
         #ax[3].set_ylim(0,np.nanmax(qtls0/1e6)*1.1)
+        i+=1
     
     ax[0].legend()
     ax[0].set_ylabel('$Q_c \; (10^6)$')
