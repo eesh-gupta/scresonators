@@ -3,10 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time 
 import re
-import fit_resonator.resonator as scres
-import fit_resonator.fit as scfit
-import handy as hy 
+import scresonators.fit_resonator.resonator as scres
+import scresonators.fit_resonator.fit as scfit
+import meas_analysis.handy as hy
 from collections import Counter
+import traceback
 import seaborn as sns
 import scipy.constants as cs
 colors = ['#4053d3', '#b51d14', '#ddb310','#658b38','#7e1e9c', '#75bbfd', '#cacaca']
@@ -38,8 +39,8 @@ def get_resonators(folder, pth, pattern):
 def convert_power(res_params): 
     for i in range(len(res_params)):
         res_params[i]['lin_power']=res_params[i]['pow']
-        res_params[i]['pow'] = np.log10(res_params[i]['pow'])*20-20
-        res_params[i]['freqs'] = res_params[i]['freqs']*1e6
+        res_params[i]['pow'] = np.log10(res_params[i]['pow'])*20-30
+        #res_params[i]['freqs'] = res_params[i]['freqs']*1e6
     return res_params
 
 def get_resonator_power_list(pattern, file_list0):
@@ -105,21 +106,21 @@ def check_phase(data):
        data = data*np.pi/180
     return data  
 
-def grab_data(pth, fname, type='vna', slope=0):
+def grab_data(pth, fname, meas_type='vna', slope=0):
     data, attrs = hy.prev_data(pth, fname)
 
     # Reformat data for scres package
-    if type=='vna':
+    if meas_type=='vna':
         data['phases'] = np.unwrap(data['phases'][0])
         data['phases'] = check_phase(data['phases'])
         data['freqs']=data['fpts'][0]
         data['amps']=data['mags'][0]
-    elif type=='soc':      
+    elif meas_type=='soc':      
         #slope = np.polyfit(data['xpts'][0], np.unwrap(data['phases'][0]), 1)
-        data['phases'] = np.mod(data['phases'][0] - slope * data['xpts'][0], 2*np.pi)
+        data['phases'] = data['phases'][0] - slope * data['xpts'][0]
         data['phases']=np.unwrap(data['phases'])
         data['amps'] = np.log10(data['amps'][0])*20
-        data['freqs']=data['xpts'][0]
+        data['freqs']=data['xpts'][0]*1e6
     return data, attrs
 
 
@@ -295,9 +296,9 @@ def analyze_sweep_double(directories, pth_base, plot=None, min_power=-100):
 
     return res_params
 
-def analyze_sweep_triple(directories, pth_base, name='res', plot=False, min_power=-120, type='vna', slope=0):
+def analyze_sweep_triple(directories, pth_base, img_pth, name='res', plot=False, min_power=-120, type='vna', slope=0):
     if type=='vna': 
-        pattern_end = 'dBm_'
+        pattern_end = 'dbm_'
         ends = ['wide1', 'narrow', 'wide2']
     else:
         pattern_end = '_'
@@ -314,7 +315,7 @@ def analyze_sweep_triple(directories, pth_base, name='res', plot=False, min_powe
     # Each directory is a temperature 
     for i in range(len(directories)): 
         start = time.time()        
-        output_path = '../../../Images/' +name+'_' + directories[i] + '/'
+        output_path = img_pth + name+'_' + directories[i] + '/'
         resonators, file_list0 = get_resonators(directories[i], pth_base, pattern0)
         pth = pth_base + directories[i]
         for j in range(len(resonators)): 
@@ -333,6 +334,8 @@ def analyze_sweep_triple(directories, pth_base, name='res', plot=False, min_powe
                     data3, _ = grab_data(pth, file3, type, slope)
                     data = combine_data(data, data3)
                 except:
+                    traceback.print_exc()
+
                     continue
 
                 # Skip really noisy ones since they are slow
@@ -340,10 +343,12 @@ def analyze_sweep_triple(directories, pth_base, name='res', plot=False, min_powe
                     if data1['vna_power'][0] < min_power: 
                         continue
                     power.append(data1['vna_power'][0])
+                    print(power[-1])
                 else:
                     if attrs['gain']< min_power: 
                         continue
                     power.append(attrs['gain'])
+                    print(power[-1])
                 
                 try:                                            
                     output = fit_resonator(data, file_list[k], output_path, plot=plot)    
@@ -522,7 +527,7 @@ def reorder(params,res_params,use_pitch=True):
 def plot_all(directories, pth_base,  output_path, name='res',min_power=-120, max_power =-25, norm=False,nfiles=3, meas_type='vna', slope=0):
     if nfiles==3:
         if meas_type=='vna': 
-            pattern_end = 'dBm_'
+            pattern_end = 'dbm_'
             ends = ['wide1', 'narrow', 'wide2']
         else:
             pattern_end = '_'
