@@ -1,0 +1,229 @@
+hf:
+  atten: -50
+  dir:
+  - - sample1_power_sweep_2
+  - - power_sweep2
+  - - power_sweep5
+  - - power_sweep4
+  - - powersweep3
+  flip: true
+  max_power: -25
+  meas:
+  - '240719'
+  - '240729'
+  - 240729-2
+  - 240729-3
+  - 240729-6
+  meas_type:
+  - vna
+  - vna
+  - vna
+  - vna
+  - soc
+  min_power: -100
+  nfiles:
+  - 1
+  - 2
+  - 3
+  - 3
+  - 3
+  pitch:
+  - 10
+  - 12
+  - 14
+  - 2
+  - 16
+  - 4
+  - 6
+  - 8
+  pth: 240729/
+  target_freq:
+  - 5.9
+  - 6.2
+  - 6.5
+  - 7
+  - 6.7
+  - 7.2
+  - 7.5
+  - 7.9
+hf-soc0:
+  atten: -50
+  dir:
+  - - powersweep0
+  - - powersweep3
+  flip: true
+  max_power: 25
+  meas:
+  - 240729-5
+  - 240729-6
+  meas_type:
+  - soc
+  - soc
+  min_power: -100
+  nfiles:
+  - 3
+  - 3
+  pitch:
+  - 10
+  - 12
+  - 14
+  - 2
+  - 16
+  - 4
+  - 6
+  - 8
+  pth: 240816-Resonator/
+  target_freq:
+  - 5.9
+  - 6.2
+  - 6.5
+  - 7
+  - 6.7
+  - 7.2
+  - 7.5
+  - 7.9
+no hf:
+  atten: -40
+  dir:
+  - - power_sweep7
+  flip: false
+  max_power: -15
+  meas:
+  - '240725'
+  meas_type:
+  - vna
+  min_power: -100
+  nfiles:
+  - 2
+  pitch:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 2
+  - 4
+  - 6
+  - 8
+  pth: 240725/
+  target_freq:
+  - 5.9
+  - 6.2
+  - 6.5
+  - 6.7
+  - 7
+  - 7.2
+  - 7.5
+  - 7.9
+scalinq:
+  atten: -65
+  dir:
+  - - powersweep7
+  flip: false
+  max_power: -15
+  meas:
+  - 240814-2
+  meas_type:
+  - vna
+  min_power: -100
+  nfiles:
+  - 3
+  pitch:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 2
+  - 4
+  - 6
+  - 8
+  pth: 240814-Resonator/
+  target_freq:
+  - 5.9
+  - 6.2
+  - 6.5
+  - 6.7
+  - 7
+  - 7.2
+  - 7.5
+  - 7.9
+silicon-scalinq:
+  atten: -65
+  dir:
+  - - powersweep8
+  - - powersweep9
+  - - powersweep10
+  flip: true
+  max_power: 20
+  meas:
+  - silicon-scalinq-1
+  - silicon-scalinq-2
+  - silicon-scalinq-3
+  meas_type:
+  - vna
+  - vna
+  - vna
+  min_power: -100
+  nfiles:
+  - 3
+  - 1
+  - 3
+  pitch:
+  - 10
+  - 12
+  - 14
+  - 2
+  - 16
+  - 4
+  - 6
+  - 8
+  pth: 240908-Resonator/
+  target_freq:
+  - 5.9
+  - 6.2
+  - 6.5
+  - 7
+  - 6.7
+  - 7.2
+  - 7.5
+  - 7.9
+silicon-scalinq_temp:
+  atten: -65
+  dir:
+  -
+    - temp_61mK
+    - temp_101mK
+    - temp_139mK
+    - temp_189mK
+    - temp_229mK
+    - temp_274mK
+    - temp_332mK
+    - temp_568mK
+  flip: true
+  max_power: 20
+  meas:
+  - silicon-scalinq-temp
+  meas_type:
+  - vna
+  min_power: -100
+  nfiles:
+  - 3
+  pitch:
+  - 10
+  - 12
+  - 14
+  - 2
+  - 16
+  - 4
+  - 6
+  - 8
+  pth: 240925-ResTempSweep/
+  target_freq:
+  - 5.9
+  - 6.2
+  - 6.5
+  - 7
+  - 6.7
+  - 7.2
+  - 7.5
+  - 7.9
+

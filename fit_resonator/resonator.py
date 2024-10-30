@@ -160,6 +160,7 @@ class Resonator:  # Object is auto-initialized with @attr annotation
     background_array: np.ndarray = None
     plot: str = 'pdf'
     plot_extra: bool = False
+    fix_freq: bool = False
     preprocess_method: str = "circle"
     power = 0
 

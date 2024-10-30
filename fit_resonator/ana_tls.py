@@ -1,17 +1,18 @@
 Tc = 9.288
-import scipy.constants as cs
+import matplotlib.pyplot as plt
 import numpy as np
+import scipy.constants as cs
+import seaborn as sns
 from scipy import special
 from scipy.optimize import curve_fit
-import matplotlib.pyplot as plt
-import seaborn as sns
+
 colors = ['#4053d3', '#b51d14', '#ddb310','#658b38','#7e1e9c', '#75bbfd', '#cacaca']
 
 # Power in W 
 def pow_res(p,atten): return 10**((p+atten)/10)*1e-3
 
 # Photons 
-def n(p,f, q,qc,atten): return pow_res(p,atten)*q**2/qc/(cs.h*f**2*np.pi)
+def n(p,f,q,qc,atten): return pow_res(p,atten)*q**2/qc/(cs.h*f**2*np.pi)
 
 # Boltzmann
 def tp(f, T): return np.tanh(cs.h*f/(2*cs.k*T))
@@ -92,7 +93,10 @@ def fit_qi(res_params, cfg, base_pth, min_power_vec=None, max_power_vec=None, bo
         a.set_ylabel(r'$Q_i \: (10^6)$')
     
     fig.tight_layout()
-    fig.savefig(base_pth +cfg['res_name']+ '_qi.png', dpi=300)
+    try:
+        fig.savefig(base_pth +cfg['res_name']+ '_qi.png', dpi=300)
+    except:
+        pass
     
     cfg['qtls0'] = np.array([params_list[i][0] for i in range(len(params_list))])
     cfg['qother'] = np.array([params_list[i][1] for i in range(len(params_list))])
@@ -118,8 +122,10 @@ def plot_res_pars(params_list, labs, base_pth):
     fnames = ''
     i=0
     for params, l in zip(params_list,labs):
-
-        fnames += params['res_name']+'_'
+        try:
+            fnames += params['res_name']+'_'
+        except:
+            pass
         ax[0].errorbar(params['pitch'], params['qc']/1e6, yerr=params['qc_err']/1e6, fmt='.',label=l)
         ax[1].errorbar(params['pitch'], params['qtls0']/1e6,yerr=params['qtls0_err']/1e6, fmt='.')
         ax[2].errorbar(params['pitch'], params['qother']/1e6,yerr=params['qother_err']/1e6, fmt='.')
@@ -150,5 +156,6 @@ def plot_res_pars(params_list, labs, base_pth):
     for a in ax:         
         a.set_xlabel('Gap width ($\mu$m)')    
     fig.tight_layout()
-
+    
     fig.savefig(base_pth +fnames+'params_tls_full.png', dpi=300)
+        

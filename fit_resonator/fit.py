@@ -681,10 +681,11 @@ def normalize(f_data, z_data, delay, a, alpha):
     return z_norm
 
 
-def preprocess_linear(xdata: np.ndarray, ydata: np.ndarray, normalize: int, output_path: str, plot_extra):
+def preprocess_linear(xdata: np.ndarray, ydata: np.ndarray, normalize: int, output_path: str, plot_extra=False):
     """
     Data Preprocessing. Get rid of cable delay and normalize phase/magnitude of S21 by linear fit of normalize # of endpoints
     """
+
     if plot_extra:
         fp.plot(np.real(ydata), np.imag(ydata), "Normalize_1", output_path)
 
@@ -725,31 +726,54 @@ def preprocess_linear(xdata: np.ndarray, ydata: np.ndarray, normalize: int, outp
     return preprocessed_data, slope, intercept, slope2, intercept2
 
 
-def preprocess_circle(xdata: np.ndarray, ydata: np.ndarray, output_path: str, plot_extra):
+def preprocess_circle(xdata: np.ndarray, ydata: np.ndarray, output_path: str, plot_extra=False, npts=10, fix_freq=False):
     """
     Data Preprocessing. Use Probst method to get rid of cable delay and normalize phase/magnitude of S21 by circle fit
     """
     # # Unwrap the phase
     # phase = np.unwrap(np.angle(ydata))
     # ydata = np.abs(ydata) * np.exp(1j * phase)
+    import matplotlib.pyplot as plt
 
+    if fix_freq: 
+        phase = np.unwrap(np.angle(ydata))
+        slope, intercept, r_value, p_value, std_err = stats.linregress(np.append(xdata[0:npts], xdata[-npts:]),
+                                                                    np.append(phase[0:npts], phase[-npts:]))
+        #slope = (phase[npts] - phase[0]) / (xdata[npts] - xdata[0])
+        #print(slope)
+        angle = np.subtract(phase, slope * xdata)  # remove cable delay
+        ydata = np.multiply(np.abs(ydata), np.exp(1j * angle))
+    else:
+        pass 
+
+    
     if plot_extra:
-        fp.plot(np.real(ydata), np.imag(ydata), "Normalize_1", output_path)
+        plt.figure(figsize=(4,4))
+        plt.plot(np.real(ydata), np.imag(ydata),'b')#, "Normalize_1", output_path)
 
     # remove cable delay
     delay = fit_delay(xdata, ydata)
     z_data = ydata * np.exp(2j * np.pi * delay * xdata)
 
+    delay = fit_delay(xdata, z_data)
+
     if plot_extra:
-        fp.plot(np.real(z_data), np.imag(z_data), "Normalize_2", output_path)
+        plt.plot(np.real(z_data), np.imag(z_data),'g')#, "Normalize_2", output_path)
+
+    z_data = z_data * np.exp(2j * np.pi * delay * xdata)
+
+
+    if plot_extra:
+        plt.plot(np.real(z_data), np.imag(z_data),'r')#, "Normalize_2", output_path)
 
     # calibrate and normalize
     delay_remaining, a, alpha, theta, phi, fr, Ql = calibrate(xdata, z_data)
     z_norm = normalize(xdata, z_data, delay_remaining, a, alpha)
 
-    if plot_extra:
-        fp.plot(np.real(z_norm), np.imag(z_norm), "Normalize_3", output_path)
 
+    if plot_extra:
+        plt.plot(np.real(z_norm), np.imag(z_norm),'k')#, "Normalize_3", output_path)
+        plt.show()
     return z_norm
 
 
@@ -985,6 +1009,7 @@ def fit(resonator):
     normalize = resonator.normalize
     data = resonator.data
     plot_extra = resonator.plot_extra
+    fix_freq = resonator.fix_freq
     preprocess_method = resonator.preprocess_method
 
     # read in data from file
@@ -1041,7 +1066,7 @@ def fit(resonator):
 
 
     elif preprocess_method == "circle":
-        ydata = preprocess_circle(xdata, ydata, output_path, plot_extra)
+        ydata = preprocess_circle(xdata, ydata, output_path, plot_extra, fix_freq=fix_freq)
     else:
         pass
 
