@@ -226,4 +226,83 @@ silicon-scalinq_temp:
   - 7.2
   - 7.5
   - 7.9
-
+soc_silicon:
+  atten: -50
+  dir:
+  - - powersweep3
+  - - powersweep5
+  - - powersweep6
+  - - powersweep1
+  flip: true
+  max_power: 25
+  meas:
+  - silicon-no-waffle
+  - silicon-no-waffle_lopower
+  - silicon-no-waffle2
+  - silicon-waffle
+  meas_type:
+  - soc
+  - soc
+  - soc
+  - soc
+  min_power: -150
+  nfiles:
+  - 3
+  - 3
+  - 3
+  - 3
+  pitch:
+  - 10
+  - 12
+  - 16
+  - 2
+  - 14
+  - 4
+  - 6
+  - 8
+  pth: 241104-Resonator/
+  target_freq:
+  - 5.9
+  - 6.2
+  - 6.5
+  - 7
+  - 6.7
+  - 7.2
+  - 7.5
+  - 7.9
+soc_silicon_waff_1108:
+  atten: -50
+  dir:
+  - - powersweep1
+  - - powersweep4
+  flip: true
+  max_power: 25
+  meas:
+  - silicon-waffle-1108
+  - silicon-waffle-pt2
+  meas_type:
+  - soc
+  - soc
+  min_power: -150
+  nfiles:
+  - 3
+  - 3
+  pitch:
+  - 10
+  - 12
+  - 16
+  - 2
+  - 14
+  - 4
+  - 6
+  - 8
+  pth: 241108-Resonator/
+  target_freq:
+  - 5.9
+  - 6.2
+  - 6.5
+  - 7
+  - 6.7
+  - 7.2
+  - 7.5
+  - 7.9

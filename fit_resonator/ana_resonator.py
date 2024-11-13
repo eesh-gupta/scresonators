@@ -177,7 +177,21 @@ def plot_raw_data(data, phs_off=0, amp_off=0):
     plt.plot(amp * np.cos(phs), amp * np.sin(phs), ".")
 
 
-def combine_data(data1, data2, fix_freq=False):
+def fit_phase(data):
+    # Fit the phase to a line
+    # use left 10% of data
+    freq_range = np.max(data["freqs"]) - np.min(data["freqs"])
+    inds = np.where(data["freqs"] < np.min(data["freqs"]) + 0.2 * freq_range)
+    mf = np.mean(data["freqs"])
+    slope = np.polyfit(data["freqs"][inds] - mf, data["phases"][inds], 1)
+    print(slope[0])
+    data["phases"] = data["phases"] - slope[0] * (data["freqs"] - mf) - slope[1]
+    data["phases"] = np.unwrap(data["phases"])
+
+    return data
+
+
+def combine_data(data1, data2, fix_freq=True):
     data = {}
     if fix_freq:
         dphase = data2["phases"][0] - data1["phases"][-1]
@@ -551,7 +565,9 @@ def analyze_sweep_gen(
                 else:
                     if attrs["gain"] < min_power:
                         continue
-                    power.append(attrs["gain"])
+
+                    power.append(np.log10(attrs["gain"]) * 20 - 30)
+
                     print(power[-1])
 
                 try:
@@ -847,13 +863,13 @@ def plot_all(
             for k in range(len(file_list)):
                 try:
                     if nfiles == 3:
-                        data1, attrs = grab_data(pth, file_list[k], meas_type, slope)
+                        data1, _ = grab_data(pth, file_list[k], meas_type, slope)
                         file2 = file_list[k].replace(ends[0], ends[1])
                         data2, _ = grab_data(pth, file2, meas_type, slope)
                         data = combine_data(data1, data2)
                         file3 = file_list[k].replace(ends[0], ends[2])
                         data3, _ = grab_data(pth, file3, meas_type, slope)
-                        data = combine_data(data, data3)
+                        data = combine_data(data, data3, fix_freq=True)
                     elif nfiles == 2:
                         data1, _ = grab_data(pth, file_list[k])
                         file2 = file_list[k].replace("wide", "narrow")
@@ -862,6 +878,7 @@ def plot_all(
                     else:
                         data1, _ = grab_data(pth, file_list[k])
                         data = data1
+                    data = fit_phase(data)
 
                 except:
                     continue
@@ -871,8 +888,6 @@ def plot_all(
                         or data1["vna_power"][0] < min_power
                     ):
                         continue
-                # print(np.max(data1['freqs'])-np.min(data2['freqs']))
-                # print(np.max(data2['freqs'])-np.min(data3['freqs']))
 
                 if norm:
                     x = 10 ** (data["amps"] / 20) * np.cos(data["phases"])
@@ -893,11 +908,12 @@ def plot_all(
                         data["amps"],
                         linewidth=1,
                     )
-                    ax2[j].plot(data["freqs"] / 1e9, data["phases"], linewidth=1)
+                    ax2[j].plot(
+                        (data["freqs"] - np.mean(data["freqs"])) / 1e3,
+                        data["phases"],
+                        linewidth=1,
+                    )
 
-            # print(np.max(data1['freqs'])-np.min(data1['freqs']))
-            # print(np.min(data2['freqs'])-np.min(data1['freqs']), np.max(data1['freqs'])-np.min(data2['freqs']))
-            # print(np.min(data3['freqs'])-np.min(data2['freqs']), np.max(data2['freqs'])-np.min(data3['freqs']))
             fig.tight_layout()
             fig2.tight_layout()
             fig2.savefig(
