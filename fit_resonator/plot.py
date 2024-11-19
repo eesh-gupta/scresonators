@@ -37,10 +37,11 @@ def name_plot(filename, strmethod, output_path, format=".pdf"):
 
 def plot(x, y, name, output_path, x_c=None, y_c=None, r=None, p_x=None, p_y=None):
     # plot any given set of x and y data
-    fig = plt.figure("raw_data", figsize=(10, 10))
+    # fig = plt.figure("raw_data", figsize=(10, 10))
+    fig = plt.figure(figsize=(10, 10))
     gs = GridSpec(2, 4)
     ax = plt.subplot(gs[0:2, 0:2])  ## plot
-    # plot axies
+    # plot axes
     ax.plot(x, y, "bo", label="raw data", markersize=3)
     # plot guide circle if it applies
     if x_c is not None and y_c is not None and r is not None:
@@ -56,7 +57,8 @@ def plot(x, y, name, output_path, x_c=None, y_c=None, r=None, p_x=None, p_y=None
     # plot a red point to represent something if it applies (resonance or off resonance for example)
     if p_x is not None and p_y is not None:
         ax.plot(p_x, p_y, "*", color="red", markersize=5)
-    fig.savefig(output_path + name + ".pdf", format="pdf")
+    ax.set_aspect("equal", adjustable="box")
+    # fig.savefig(output_path + name + ".pdf", format="pdf")
 
 
 def plot2(x, y, x2, y2, name, output_path):
@@ -819,12 +821,12 @@ def PlotFit(
     except Exception as e:
         print(">Error when trying to write parameters on plot")
         print(f">{e}")
-        quit()
+    #    quit()
     # Create plot metadata output file
     try:
         create_metadata(Method, output_path)
     except Exception as e:
         print(">Error when trying to create metadata file")
         print(f">{e}")
-        quit()
+        # quit()
     return fig

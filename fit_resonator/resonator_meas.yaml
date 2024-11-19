@@ -275,18 +275,31 @@ soc_silicon_waff_1108:
   dir:
   - - powersweep1
   - - powersweep4
+  - - powersweep14
+  - - powersweep19
   flip: true
   max_power: 25
   meas:
   - silicon-waffle-1108
   - silicon-waffle-pt2
+  - silicon-waffle-sing
+  - silicon-waffle-phase
   meas_type:
+  - soc
+  - soc
   - soc
   - soc
   min_power: -150
   nfiles:
   - 3
   - 3
+  - 1
+  - 1
+  slope:
+  - 29.43
+  - 1129.46
+  - 1129.46
+  - 1129.46
   pitch:
   - 10
   - 12

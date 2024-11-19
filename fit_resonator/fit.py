@@ -175,6 +175,7 @@ def find_initial_guess(x, y1, y2, Method, output_path, plot_extra):
     circle, y coordinate for center of fit circle, radius of fit circle
 
     """
+    plot_extra = False
     try:
         # recombine transmission S21 from real and complex parts
         y = y1 + 1j * y2
@@ -204,22 +205,22 @@ def find_initial_guess(x, y1, y2, Method, output_path, plot_extra):
         quit()
 
     if plot_extra:
-        try:
-            fp.plot(
-                np.real(y),
-                np.imag(y),
-                "circle",
-                output_path,
-                np.real(z_c),
-                np.imag(z_c),
-                r,
-            )
-        except:
-            print(
-                ">Error when trying to plot raw data and circle fit in ",
-                "find_initial_guess",
-            )
-            quit()
+        #        try:
+        fp.plot(
+            np.real(y),
+            np.imag(y),
+            "circle",
+            output_path,
+            np.real(z_c),
+            np.imag(z_c),
+            r,
+        )
+        # except:
+        #     print(
+        #         ">Error when trying to plot raw data and circle fit in ",
+        #         "find_initial_guess",
+        #     )
+        #     quit()
 
     try:
         ## move gap of circle to (0,0)
@@ -276,7 +277,7 @@ def find_initial_guess(x, y1, y2, Method, output_path, plot_extra):
             ">Error when trying to shift data according to phi in ",
             "find_initial_guess",
         )
-        quit()
+        # quit()
 
     try:
         if f_c < 0:
@@ -333,7 +334,7 @@ def find_initial_guess(x, y1, y2, Method, output_path, plot_extra):
                     ">Failed to find initial guess for method PHI.",
                     " Please manually initialize a guess",
                 )
-            quit()
+            # quit()
 
     elif Method.method == "DCM REFLECTION":
         try:
@@ -821,7 +822,7 @@ def preprocess_circle(
     xdata: np.ndarray,
     ydata: np.ndarray,
     output_path: str,
-    plot_extra=False,
+    plot_extra=True,
     npts=5,
     fix_freq=False,
 ):
@@ -833,26 +834,33 @@ def preprocess_circle(
     # ydata = np.abs(ydata) * np.exp(1j * phase)
     import matplotlib.pyplot as plt
 
-    if fix_freq:
-        phase = np.unwrap(np.angle(ydata))
-        slope, intercept, r_value, p_value, std_err = stats.linregress(
-            np.append(xdata[0:npts], xdata[-npts:]),
-            np.append(phase[0:npts], phase[-npts:]),
-        )
-        # slope = (phase[npts] - phase[0]) / (xdata[npts] - xdata[0])
-        # print(slope)
-        angle = np.subtract(phase, slope * xdata)  # remove cable delay
-        ydata = np.multiply(np.abs(ydata), np.exp(1j * angle))
-    else:
-        pass
+    plot_extra = False
+
+    # if fix_freq:
+    #     phase = np.unwrap(np.angle(ydata))
+    #     slope, intercept, r_value, p_value, std_err = stats.linregress(
+    #         np.append(xdata[0:npts], xdata[-npts:]),
+    #         np.append(phase[0:npts], phase[-npts:]),
+    #     )
+    #     # slope = (phase[npts] - phase[0]) / (xdata[npts] - xdata[0])
+    #     # print(slope)
+    #     angle = np.subtract(phase, slope * xdata)  # remove cable delay
+    #     ydata = np.multiply(np.abs(ydata), np.exp(1j * angle))
+    # else:
+    #     pass
 
     if plot_extra:
         plt.figure(figsize=(4, 4))
         plt.plot(np.real(ydata), np.imag(ydata), "b")  # , "Normalize_1", output_path)
+        plt.show()
+        fig, ax = plt.subplots(1, 1)
+        ax.plot(xdata, np.angle(ydata))
+
     # remove cable delay
     delay = fit_delay(xdata, ydata)
-    z_data = ydata * np.exp(2j * np.pi * delay * xdata)
 
+    z_data = ydata * np.exp(2j * np.pi * delay * xdata)
+    # z_data=ydata
     # delay = fit_delay(xdata, z_data)
 
     # if plot_extra:
@@ -861,19 +869,21 @@ def preprocess_circle(
     # z_data = z_data * np.exp(2j * np.pi * delay * xdata)
 
     if plot_extra:
+        plt.figure(figsize=(4, 4))
+
         plt.plot(np.real(z_data), np.imag(z_data), "r")  # , "Normalize_2", output_path)
+        plt.show()
 
     # calibrate and normalize
     delay_remaining, a, alpha, theta, phi, fr, Ql = calibrate(xdata, z_data)
     z_norm = normalize(xdata, z_data, delay_remaining, a, alpha)
 
-    delay_remaining, a, alpha, theta, phi, fr, Ql = calibrate(xdata, z_norm)
-    z_norm = normalize(xdata, z_norm, delay_remaining, a, alpha)
-
     # print(a)
     # print(alpha)
 
     if plot_extra:
+        plt.figure(figsize=(4, 4))
+
         plt.plot(np.real(z_norm), np.imag(z_norm), "k")  # , "Normalize_3", output_path)
         plt.show()
     return z_norm
@@ -1559,52 +1569,52 @@ def fit(resonator):
         extract_factor = [xstart, xend]
 
         # plot fit
-        try:
+        # try:
 
-            title = f"{Method.method} Method Fit: {resonator.filename}"
-            figurename = f"{Method.method} with Monte Carlo Fit and Raw data\nPower: {resonator.filename}"
-            # x_raw = xdata
-            # y_raw = ydata]
-            fig = fp.PlotFit(
-                x_raw,
-                y_raw,
-                x_initial,
-                y_initial,
-                slope,
-                intercept,
-                slope2,
-                intercept2,
-                output_params,
-                Method,
-                error,
-                figurename,
-                x_c,
-                y_c,
-                r,
+        title = f"{Method.method} Method Fit: {resonator.filename}"
+        figurename = f"{Method.method} with Monte Carlo Fit and Raw data\nPower: {resonator.filename}"
+        # x_raw = xdata
+        # y_raw = ydata]
+        fig = fp.PlotFit(
+            x_raw,
+            y_raw,
+            x_initial,
+            y_initial,
+            slope,
+            intercept,
+            slope2,
+            intercept2,
+            output_params,
+            Method,
+            error,
+            figurename,
+            x_c,
+            y_c,
+            r,
+            output_path,
+            conf_array,
+            xdata,
+            ydata,
+            extract_factor,
+            title=title,
+            manual_params=Method.manual_init,
+        )
+        # except Exception as e:
+        #     print(f"Exception: {e}")
+        #     print(f"Failed to plot {Method.method} fit for {data}")
+        # try:
+        fig.savefig(
+            fp.name_plot(
+                resonator.filename,
+                str(Method.method),
                 output_path,
-                conf_array,
-                xdata,
-                ydata,
-                extract_factor,
-                title=title,
-                manual_params=Method.manual_init,
-            )
-        except Exception as e:
-            print(f"Exception: {e}")
-            print(f"Failed to plot {Method.method} fit for {data}")
-        try:
-            fig.savefig(
-                fp.name_plot(
-                    resonator.filename,
-                    str(Method.method),
-                    output_path,
-                    format=f".{resonator.plot}",
-                ),
-                format=f"{resonator.plot}",
-            )
-        except:
-            print(
-                f"Unrecognized file format: {resonator.plot}\n Please use png, pdf, ps, eps or svg."
-            )
+                format=f".{resonator.plot}",
+            ),
+            format=f"{resonator.plot}",
+        )
+        # except:
+        #     print(
+        #         f"Unrecognized file format: {resonator.plot}\n Please use png, pdf, ps, eps or svg."
+        #     )
 
     return output_params, conf_array, error, init

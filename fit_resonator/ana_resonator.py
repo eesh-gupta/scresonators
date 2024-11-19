@@ -12,6 +12,7 @@ import seaborn as sns
 import meas_analysis.handy as hy
 import scresonators.fit_resonator.fit as scfit
 import scresonators.fit_resonator.resonator as scres
+import pyCircFit_v3 as cf
 
 colors = ["#4053d3", "#b51d14", "#ddb310", "#658b38", "#7e1e9c", "#75bbfd", "#cacaca"]
 
@@ -152,7 +153,8 @@ def grab_data(pth, fname, meas_type="vna", slope=0):
             data["phases"][0][-1] < data["phases"][0][-2] < data["phases"][0][-3]
             or data["phases"][0][2] < data["phases"][0][1] < data["phases"][0][0]
         ):
-            data["phases"] = -data["phases"][0] - slope * data["xpts"][0]
+            data["phases"] = data["phases"][0] + slope * data["xpts"][0]
+            # data["phases"] = -data["phases"][0] - slope * data["xpts"][0]
         else:
             data["phases"] = data["phases"][0] - slope * data["xpts"][0]
         data["phases"] = np.unwrap(data["phases"])
@@ -161,27 +163,29 @@ def grab_data(pth, fname, meas_type="vna", slope=0):
     return data, attrs
 
 
-def plot_raw_data(data, phs_off=0, amp_off=0):
-    fig, ax = plt.subplots(1, 2, figsize=(10, 4))
-    ax[0].plot(data["freqs"] / 1e9, data["phases"] + phs_off)
-    ax[1].plot(data["freqs"] / 1e9, data["amps"] - amp_off)
-    ax[0].set_xlabel("Frequency (GHz)")
-    ax[0].set_ylabel("Phase (rad)")
-    ax[1].set_xlabel("Frequency (GHz)")
-    ax[1].set_ylabel("Amplitude (dB)")
+def plot_raw_data(data, phs_off=0, amp_off=0, circ_only=True):
     phs = data["phases"] + phs_off
     amp = 10 ** ((data["amps"] - amp_off) / 20)
-    fig.tight_layout()
-    plt.figure()
+    if not circ_only:
+        fig, ax = plt.subplots(1, 2, figsize=(10, 4))
+        ax[0].plot(data["freqs"] / 1e9, data["phases"] + phs_off)
+        ax[1].plot(data["freqs"] / 1e9, data["amps"] - amp_off)
+        ax[0].set_xlabel("Frequency (GHz)")
+        ax[0].set_ylabel("Phase (rad)")
+        ax[1].set_xlabel("Frequency (GHz)")
+        ax[1].set_ylabel("Amplitude (dB)")
 
-    plt.plot(amp * np.cos(phs), amp * np.sin(phs), ".")
+        fig.tight_layout()
+    plt.figure()
+    plt.plot(amp / np.max(amp) * np.cos(phs), amp / np.max(amp) * np.sin(phs), ".")
+    # plt.gca().set_aspect("equal", adjustable="box")
 
 
 def fit_phase(data):
     # Fit the phase to a line
     # use left 10% of data
     freq_range = np.max(data["freqs"]) - np.min(data["freqs"])
-    inds = np.where(data["freqs"] < np.min(data["freqs"]) + 0.2 * freq_range)
+    inds = np.where(data["freqs"] > np.max(data["freqs"]) - 0.2 * freq_range)
     mf = np.mean(data["freqs"])
     slope = np.polyfit(data["freqs"][inds] - mf, data["phases"][inds], 1)
     print(slope[0])
@@ -193,8 +197,17 @@ def fit_phase(data):
 
 def combine_data(data1, data2, fix_freq=True):
     data = {}
+    mp = np.mean(data1["phases"])
+    data1["phases"] = data1["phases"] - mp
+    data2["phases"] = data2["phases"] - mp
     if fix_freq:
-        dphase = data2["phases"][0] - data1["phases"][-1]
+        from scipy.interpolate import interp1d
+
+        phase_interp = interp1d(
+            data1["freqs"], data1["phases"], fill_value="extrapolate"
+        )
+        ph = phase_interp(data2["freqs"][0])
+        dphase = data2["phases"][0] - ph
         data2["phases"] = data2["phases"] - dphase
     keys_list = ["freqs", "amps", "phases"]
     for key in keys_list:
@@ -246,234 +259,64 @@ def stow_data(params, res_params, j, power, err):
     return res_params
 
 
-def analyze_sweep(directories, pth_base, name="res", plot=None, min_power=-100):
-    pattern0 = r"res_(\d+)_\d{2,3}dbm"
+def stow_data_oth(params, res_params, j, power):
+    # Put all the data for a given resonator/temp in arrays.
+    power = np.array(power)
+    q = np.array([params[k]["Qtot"] for k in range(len(params))])
+    qc = np.array([params[k]["Qc"] for k in range(len(params))])
+    Qi = np.array([params[k]["Qi"] for k in range(len(params))])
+    freq = np.array([params[k]["fr"] for k in range(len(params))])
+    phase = np.array([params[k]["phi"] for k in range(len(params))])
+    # qi_phi = 1 / (1 / q - 1 / qc)
+    # Qc_comp = qc / np.exp(1j * phase)
+    # Qi = (q**-1 - np.real(Qc_comp**-1)) ** -1
 
-    # Initialize dict by getting list of resonators, creating dict with len = n resonators
-    resonators, file_list = get_resonators(directories[0], pth_base, pattern0)
-    res_params = [None] * len(resonators)
-    for i in range(len(resonators)):
-        res_params[i] = {
-            "freqs": [],
-            "phs": [],
-            "q": [],
-            "qi": [],
-            "qc": [],
-            "qi_phi": [],
-            "pow": [],
-            "qi_err": [],
-            "q_err": [],
-            "phs_err": [],
-            "qc_err": [],
-            "qc_real_err": [],
-            "f_err": [],
-        }
+    res_params[j]["pow"].append(power)
+    res_params[j]["q"].append(q)
+    res_params[j]["qc"].append(qc)
+    res_params[j]["freqs"].append(freq)
+    res_params[j]["phs"].append(phase)
+    # res_params[j]["qi_phi"].append(qi_phi)
+    res_params[j]["qi"].append(Qi)
 
-    # Each directory is a temperature
-    for i in range(len(directories)):
-        start = time.time()
-        print(i)
-        output_path = "../../../Images/" + name + "_" + directories[i] + "/"
-        resonators, file_list0 = get_resonators(directories[i], pth_base, pattern0)
-        pth = pth_base + directories[i]
-        for j in range(len(resonators)):
-            # Grab all the files for a given resonator, then sort by power.
-            pattern = "res_{:d}_".format(resonators[j]) + "(\d{2,3})dbm"
-            file_list = get_resonator_power_list(pattern, file_list0)
+    res_params[j]["phs_err"].append(
+        np.array([params[i]["phi_stderr"] for i in range(len(params))])
+    )
+    res_params[j]["q_err"].append(
+        np.array([params[i]["Qtot_stderr"] for i in range(len(params))])
+    )
+    res_params[j]["qi_err"].append(
+        np.array([params[i]["Qi_stderr"] for i in range(len(params))])
+    )
+    res_params[j]["qc_err"].append(
+        np.array([params[i]["Qc_stderr"] for i in range(len(params))])
+    )
+    res_params[j]["f_err"].append(
+        np.array([params[i]["fr_stderr"] for i in range(len(params))])
+    )
 
-            params, err, power = [], [], []
-            for k in range(len(file_list)):
-                data, attrs = grab_data(pth, file_list[k])
-
-                # Skip really noisy ones since they are slow
-                if data["vna_power"][0] < min_power:
-                    continue
-                power.append(data["vna_power"][0])
-
-                try:
-                    output = fit_resonator(data, file_list[k], output_path, plot=plot)
-                    params.append(output[0])
-                    err.append(output[1])
-                except Exception as error:
-                    print("An exception occurred:", error)
-                    params.append(np.nan * np.ones(4))
-                    err.append(np.nan * np.ones(6))
-            res_params = stow_data(params, res_params, j, power, err)
-
-            print("Time elapsed: ", time.time() - start)
-
-    for i in range(len(resonators)):
-        for key in res_params[i].keys():
-            res_params[i][key] = np.array(res_params[i][key])
+    fig, ax = plt.subplots(2, 1, figsize=(6, 7.5), sharex=True)
+    ax[0].plot(power, Qi, ".", markersize=6)
+    ax[0].set_ylabel("$Q_i$")
+    ax[1].plot(power, qc, ".", markersize=6)
+    ax[1].set_ylabel("$Q_c$")
+    ax[1].set_xlabel("Power (dBm)")
+    fig.suptitle("$f_0 = $ {:3.3f} GHz".format(freq[0] / 1e9))
+    fig.tight_layout()
 
     return res_params
 
 
-def analyze_sweep_double(directories, pth_base, plot=None, min_power=-100):
-    pattern0 = r"res_(\d+)_\d{2,3}dbm_wide"
-
-    # Initialize dict by getting list of resonators, creating dict with len = n resonators
-    resonators, file_list = get_resonators(directories[0], pth_base, pattern0)
-    res_params = [None] * len(resonators)
-    for i in range(len(resonators)):
-        res_params[i] = {
-            "freqs": [],
-            "phs": [],
-            "q": [],
-            "qi": [],
-            "qc": [],
-            "qi_phi": [],
-            "pow": [],
-            "qi_err": [],
-            "q_err": [],
-            "phs_err": [],
-            "qc_err": [],
-            "qc_real_err": [],
-            "f_err": [],
-        }
-
-    # Each directory is a temperature
-    for i in range(len(directories)):
-        start = time.time()
-        print(i)
-        output_path = "../../../Images/res_name_" + directories[i] + "/"
-        resonators, file_list0 = get_resonators(directories[i], pth_base, pattern0)
-        pth = pth_base + directories[i]
-        for j in range(len(resonators)):
-            # Grab all the files for a given resonator, then sort by power.
-            pattern = "res_{:d}_".format(resonators[j]) + "(\d{2,3})dbm_wide"
-            file_list = get_resonator_power_list(pattern, file_list0)
-
-            params, err, power = [], [], []
-            for k in range(len(file_list)):
-                data1 = grab_data(pth, file_list[k])
-                file2 = file_list[k].replace("wide", "narrow")
-                try:
-                    data2 = grab_data(pth, file2)
-                    data = combine_data(data1, data2)
-                except:
-                    continue
-
-                # Skip really noisy ones since they are slow
-                if data1["vna_power"][0] < min_power:
-                    continue
-                power.append(data1["vna_power"][0])
-
-                try:
-                    output = fit_resonator(data, file_list[k], output_path, plot=plot)
-                    params.append(output[0])
-                    err.append(output[1])
-                except Exception as error:
-                    print("An exception occurred:", error)
-                    params.append(np.nan * np.ones(4))
-                    err.append(np.nan * np.ones(6))
-            res_params = stow_data(params, res_params, j, power, err)
-
-            print("Time elapsed: ", time.time() - start)
-
-    for i in range(len(resonators)):
-        for key in res_params[i].keys():
-            res_params[i][key] = np.array(res_params[i][key])
-
-    return res_params
-
-
-def analyze_sweep_triple(
-    directories,
-    pth_base,
-    img_pth,
-    name="res",
-    plot=False,
-    min_power=-120,
-    type="vna",
-    slope=0,
-):
-    if type == "vna":
-        pattern_end = "dbm_"
-        ends = ["wide1", "narrow", "wide2"]
-    else:
-        pattern_end = "_"
-        ends = ["wideleft", "narrow", "wideright"]
-
-    pattern0 = r"res_(\d+)_\d{2,5}" + pattern_end + ends[0]
-
-    # Initialize dict by getting list of resonators, creating dict with len = n resonators
-    resonators, file_list = get_resonators(directories[0], pth_base, pattern0)
-    res_params = [None] * len(resonators)
-    for i in range(len(resonators)):
-        res_params[i] = {
-            "freqs": [],
-            "phs": [],
-            "q": [],
-            "qi": [],
-            "qc": [],
-            "qi_phi": [],
-            "pow": [],
-            "qi_err": [],
-            "q_err": [],
-            "phs_err": [],
-            "qc_err": [],
-            "qc_real_err": [],
-            "f_err": [],
-        }
-
-    # Each directory is a temperature
-    for i in range(len(directories)):
-        start = time.time()
-        output_path = img_pth + name + "_" + directories[i] + "/"
-        resonators, file_list0 = get_resonators(directories[i], pth_base, pattern0)
-        pth = pth_base + directories[i]
-        for j in range(len(resonators)):
-            params, err, power = [], [], []
-            # Grab all the files for a given resonator, then sort by power.
-            pattern = (
-                "res_{:d}_".format(resonators[j]) + "(\d{2,5})" + pattern_end + ends[0]
-            )
-            file_list = get_resonator_power_list(pattern, file_list0)
-
-            for k in range(len(file_list)):
-                try:
-                    data1, attrs = grab_data(pth, file_list[k], type, slope)
-                    file2 = file_list[k].replace(ends[0], ends[1])
-                    data2, _ = grab_data(pth, file2, type, slope)
-                    data = combine_data(data1, data2)
-                    file3 = file_list[k].replace(ends[0], ends[2])
-                    data3, _ = grab_data(pth, file3, type, slope)
-                    data = combine_data(data, data3)
-                except:
-                    traceback.print_exc()
-
-                    continue
-
-                # Skip really noisy ones since they are slow
-                if type == "vna":
-                    if data1["vna_power"][0] < min_power:
-                        continue
-                    power.append(data1["vna_power"][0])
-                    print(power[-1])
-                else:
-                    if attrs["gain"] < min_power:
-                        continue
-                    power.append(attrs["gain"])
-                    print(power[-1])
-
-                try:
-                    output = fit_resonator(data, file_list[k], output_path, plot=plot)
-                    params.append(output[0])
-                    err.append(output[1])
-                except Exception as error:
-                    print("An exception occurred:", error)
-                    params.append(np.nan * np.ones(4))
-                    err.append(np.nan * np.ones(6))
-            res_params = stow_data(params, res_params, j, power, err)
-
-            print("Time elapsed: ", time.time() - start)
-
-    for i in range(len(resonators)):
-        for key in res_params[i].keys():
-            res_params[i][key] = np.array(res_params[i][key])
-
-    return res_params
+def norm_data(data):
+    amp = 10 ** ((data["amps"]) / 20)
+    phs = data["phases"]
+    z = amp * np.exp(1j * phs)
+    z = z / np.max(z)
+    data["amps"] = np.log10(np.abs(z)) * 20
+    data["phases"] = np.angle(z)
+    data["x"] = np.real(z)
+    data["y"] = np.imag(z)
+    return data
 
 
 def analyze_sweep_gen(
@@ -484,28 +327,15 @@ def analyze_sweep_gen(
     name="res",
     plot=False,
     min_power=-120,
-    type="vna",
+    meas_type="vna",
     slope=0,
     fix_freq=False,
 ):
-    if nfiles == 3:
-        if type == "vna":
-            pattern_end = "dbm_"
-            ends = ["wide1", "narrow", "wide2"]
-        else:
-            pattern_end = "_"
-            ends = ["wideleft", "narrow", "wideright"]
-    else:
-        ends = [""]
-        if type == "vna":
-            pattern_end = "dbm"
-        else:
-            pattern_end = ""
-
-    pattern0 = r"res_(\d+)_\d{1,5}" + pattern_end + ends[0]
+    resonators, file_list, ends = resonator_list(
+        directories, pth_base, nfiles, meas_type
+    )
 
     # Initialize dict by getting list of resonators, creating dict with len = n resonators
-    resonators, file_list = get_resonators(directories[0], pth_base, pattern0)
     res_params = [None] * len(resonators)
     for i in range(len(resonators)):
         res_params[i] = {
@@ -528,39 +358,26 @@ def analyze_sweep_gen(
     for i in range(len(directories)):
         start = time.time()
         output_path = img_pth + name + "_" + directories[i] + "/"
-        resonators, file_list0 = get_resonators(directories[i], pth_base, pattern0)
         pth = pth_base + directories[i]
         for j in range(len(resonators)):
             params, err, power = [], [], []
             # Grab all the files for a given resonator, then sort by power.
-            pattern = (
-                "res_{:d}_".format(resonators[j]) + "(\d{1,5})" + pattern_end + ends[0]
-            )
-            file_list = get_resonator_power_list(pattern, file_list0)
-
-            for k in range(len(file_list)):
+            for k in range(len(file_list[i][j])):  # power
+                fname = file_list[i][j][k]
                 try:
-                    data1, attrs = grab_data(pth, file_list[k], type, slope)
-                    if nfiles == 1:
-                        data = data1
-                    if nfiles > 1:
-                        file2 = file_list[k].replace(ends[0], ends[1])
-                        data2, _ = grab_data(pth, file2, type, slope)
-                        data = combine_data(data1, data2, fix_freq)
-                    if nfiles > 2:
-                        file3 = file_list[k].replace(ends[0], ends[2])
-                        data3, _ = grab_data(pth, file3, type, slope)
-                        data = combine_data(data, data3, fix_freq)
+                    data, attrs = load_resonator(
+                        fname, pth, nfiles, slope, meas_type, ends, fix_freq=True
+                    )
+                    # data = norm_data(data)
                 except:
                     traceback.print_exc()
-
                     continue
 
                 # Skip really noisy ones since they are slow
                 if type == "vna":
-                    if data1["vna_power"][0] < min_power:
+                    if data["vna_power"][0] < min_power:
                         continue
-                    power.append(data1["vna_power"][0])
+                    power.append(data["vna_power"][0])
                     print(power[-1])
                 else:
                     if attrs["gain"] < min_power:
@@ -570,16 +387,16 @@ def analyze_sweep_gen(
 
                     print(power[-1])
 
-                try:
-                    output = fit_resonator(
-                        data, file_list[k], output_path, plot=plot, fix_freq=True
-                    )
-                    params.append(output[0])
-                    err.append(output[1])
-                except Exception as error:
-                    print("An exception occurred:", error)
-                    params.append(np.nan * np.ones(4))
-                    err.append(np.nan * np.ones(6))
+                # try:
+                output = fit_resonator(
+                    data, file_list[i][j][k], output_path, plot=plot, fix_freq=True
+                )
+                params.append(output[0])
+                err.append(output[1])
+                # except Exception as error:
+                #    print("An exception occurred:", error)
+                #    params.append(np.nan * np.ones(4))
+                #    err.append(np.nan * np.ones(6))
             res_params = stow_data(params, res_params, j, power, err)
 
             print("Time elapsed: ", time.time() - start)
@@ -805,6 +622,76 @@ def reorder(params, res_params, use_pitch=True):
     return params, res_params
 
 
+def resonator_list(directories, pth_base, nfiles, meas_type):
+    if nfiles == 3:
+        if meas_type == "vna":
+            pattern_end = "dbm_"
+            ends = ["wide1", "narrow", "wide2"]
+        else:
+            pattern_end = "_"
+            ends = ["wideleft", "narrow", "wideright"]
+        pattern0 = r"res_(\d+)_\d{2,5}" + pattern_end + ends[0]
+    elif nfiles == 2:
+        pattern0 = r"res_(\d+)_\d{2,5}dbm_wide"
+        ends = []
+    else:
+        if meas_type == "vna":
+            pattern_end = "dbm"
+        else:
+            pattern_end = ""
+        pattern0 = r"res_(\d+)_\d{2,5}" + pattern_end
+        ends = [""]
+
+    resonators, _ = get_resonators(directories[0], pth_base, pattern0)
+    file_list_full = []
+    for i in range(len(directories)):
+        file_list_full.append([])
+        # Grab all the files for a given resonator, then sort by power.
+        resonators, file_list0 = get_resonators(directories[i], pth_base, pattern0)
+
+        for j in range(len(resonators)):
+            if nfiles == 3:
+                pattern = (
+                    "res_{:d}_".format(resonators[j])
+                    + "(\d{2,5})"
+                    + pattern_end
+                    + ends[0]
+                )
+            elif nfiles == 2:
+                pattern = "res_{:d}_".format(resonators[j]) + "(\d{2,3})dbm_wide"
+            else:
+                pattern = (
+                    "res_{:d}_".format(resonators[j])
+                    + "(\d{2,5})"
+                    + pattern_end
+                    + ends[0]
+                )
+            file_list = get_resonator_power_list(pattern, file_list0)
+            file_list_full[i].append(file_list)
+
+    return resonators, file_list_full, ends
+    # Initialize dict by getting list of resonators, creating dict with len = n resonators
+
+
+def load_resonator(fname, pth, nfiles, slope, meas_type, ends, fix_freq):
+    # file_list[k]
+
+    data1, attrs = grab_data(pth, fname, meas_type, slope)
+    if nfiles == 1:
+        data = data1
+        data["phases"] = data["phases"] - np.mean(data["phases"])
+    if nfiles > 1:
+        file2 = fname.replace(ends[0], ends[1])
+        data2, _ = grab_data(pth, file2, meas_type, slope)
+        data = combine_data(data1, data2, fix_freq)
+    if nfiles > 2:
+        file3 = fname.replace(ends[0], ends[2])
+        data3, _ = grab_data(pth, file3, meas_type, slope)
+        data = combine_data(data, data3, fix_freq)
+
+    return data, attrs
+
+
 def plot_all(
     directories,
     pth_base,
@@ -816,85 +703,52 @@ def plot_all(
     nfiles=3,
     meas_type="vna",
     slope=0,
+    circ=False,
+    half_norm=False,
 ):
-    if nfiles == 3:
-        if meas_type == "vna":
-            pattern_end = "dbm_"
-            ends = ["wide1", "narrow", "wide2"]
-        else:
-            pattern_end = "_"
-            ends = ["wideleft", "narrow", "wideright"]
-        pattern0 = r"res_(\d+)_\d{2,5}" + pattern_end + ends[0]
-    elif nfiles == 2:
-        pattern0 = r"res_(\d+)_\d{2,3}dbm_wide"
-    else:
-        pattern0 = r"res_(\d+)_\d{2,3}dbm"
 
-    # Initialize dict by getting list of resonators, creating dict with len = n resonators
-    resonators, file_list = get_resonators(directories[0], pth_base, pattern0)
+    resonators, file_list, ends = resonator_list(
+        directories, pth_base, nfiles, meas_type
+    )
     nres = len(resonators)
 
-    sns.set_palette("coolwarm", n_colors=int(np.ceil(len(file_list) / nres)))
+    sns.set_palette("coolwarm", n_colors=int(len(file_list[0][0])))
     fig, ax = plt.subplots(2, 4, figsize=(10, 7))
     fig2, ax2 = plt.subplots(2, 4, figsize=(10, 7))
     ax = ax.flatten()
     ax2 = ax2.flatten()
-
+    output = []
     # Each directory is a temperature
     for i in range(len(directories)):
-
-        resonators, file_list0 = get_resonators(directories[i], pth_base, pattern0)
         pth = pth_base + directories[i]
         for j in range(len(resonators)):
-            # Grab all the files for a given resonator, then sort by power.
-            if nfiles == 3:
-                pattern = (
-                    "res_{:d}_".format(resonators[j])
-                    + "(\d{2,5})"
-                    + pattern_end
-                    + ends[0]
-                )
-            elif nfiles == 2:
-                pattern = "res_{:d}_".format(resonators[j]) + "(\d{2,3})dbm_wide"
-            else:
-                pattern = "res_{:d}_".format(resonators[j]) + "(\d{2,3})dbm"
-            file_list = get_resonator_power_list(pattern, file_list0)
-
-            for k in range(len(file_list)):
+            # for k in range(1):
+            for k in range(len(file_list[i][j])):  # power
+                fname = file_list[i][j][k]
                 try:
-                    if nfiles == 3:
-                        data1, _ = grab_data(pth, file_list[k], meas_type, slope)
-                        file2 = file_list[k].replace(ends[0], ends[1])
-                        data2, _ = grab_data(pth, file2, meas_type, slope)
-                        data = combine_data(data1, data2)
-                        file3 = file_list[k].replace(ends[0], ends[2])
-                        data3, _ = grab_data(pth, file3, meas_type, slope)
-                        data = combine_data(data, data3, fix_freq=True)
-                    elif nfiles == 2:
-                        data1, _ = grab_data(pth, file_list[k])
-                        file2 = file_list[k].replace("wide", "narrow")
-                        data2, _ = grab_data(pth, file2)
-                        data = combine_data(data1, data2)
-                    else:
-                        data1, _ = grab_data(pth, file_list[k])
-                        data = data1
-                    data = fit_phase(data)
-
+                    data, _ = load_resonator(
+                        fname, pth, nfiles, slope, meas_type, ends, fix_freq=True
+                    )
+                    # data = fit_phase(data)
                 except:
+                    traceback.print_exc()
                     continue
                 if meas_type == "vna":
                     if (
-                        data1["vna_power"][0] > max_power
-                        or data1["vna_power"][0] < min_power
+                        data["vna_power"][0] > max_power
+                        or data["vna_power"][0] < min_power
                     ):
                         continue
 
                 if norm:
                     x = 10 ** (data["amps"] / 20) * np.cos(data["phases"])
                     y = 10 ** (data["amps"] / 20) * np.sin(data["phases"])
-                    # z, slopes, intercept, slope2, intercept2 = scfit.preprocess_linear(x, y, normalize=10, output_path='hi', plot_extra=False)
                     z = scfit.preprocess_circle(
-                        data["freqs"], x + 1j * y, output_path="hi", fix_freq=True
+                        data["freqs"],
+                        x + 1j * y,
+                        output_path="hi",
+                        fix_freq=True,
+                        plot_extra=True,
                     )
                     ax[j].plot(
                         (data["freqs"] - np.mean(data["freqs"])) / 1e3,
@@ -902,6 +756,26 @@ def plot_all(
                         linewidth=1,
                     )
                     ax2[j].plot(data["freqs"] / 1e9, np.angle(z), linewidth=1)
+                    if circ:
+                        plt.figure()
+                        plt.plot(np.real(z), np.imag(z), ".")
+                elif half_norm:
+                    ax[j].plot(
+                        (data["freqs"] - np.mean(data["freqs"])) / 1e3,
+                        data["amps"] / np.max(data["amps"]),
+                        linewidth=1,
+                    )
+                    ax2[j].plot(
+                        (data["freqs"] - np.mean(data["freqs"])) / 1e3,
+                        data["phases"],
+                        linewidth=1,
+                    )
+                    data = norm_data(data)
+                    if circ:
+                        plt.figure()
+
+                        plot_raw_data(data, phs_off=0, amp_off=0, circ_only=True)
+
                 else:
                     ax[j].plot(
                         (data["freqs"] - np.mean(data["freqs"])) / 1e3,
@@ -913,6 +787,8 @@ def plot_all(
                         data["phases"],
                         linewidth=1,
                     )
+                    if circ:
+                        plot_raw_data(data, phs_off=0, amp_off=0, circ_only=True)
 
             fig.tight_layout()
             fig2.tight_layout()
@@ -923,3 +799,97 @@ def plot_all(
             fig.savefig(
                 output_path + name + "_" + directories[i] + "_all_data_amp.png", dpi=300
             )
+    return file_list
+
+
+def analyze_sweep_other(
+    directories,
+    pth_base,
+    output_path,
+    name="res",
+    min_power=-120,
+    max_power=-25,
+    norm=False,
+    nfiles=3,
+    meas_type="vna",
+    slope=0,
+    circ=False,
+    half_norm=False,
+):
+
+    resonators, file_list, ends = resonator_list(
+        directories, pth_base, nfiles, meas_type
+    )
+    nres = len(resonators)
+    res_params = [None] * len(resonators)
+    for i in range(len(resonators)):
+        res_params[i] = {
+            "freqs": [],
+            "phs": [],
+            "q": [],
+            "qi": [],
+            "qc": [],
+            "qi_phi": [],
+            "pow": [],
+            "qi_err": [],
+            "q_err": [],
+            "phs_err": [],
+            "qc_err": [],
+            "qc_real_err": [],
+            "f_err": [],
+        }
+    sns.set_palette("coolwarm", n_colors=int(len(file_list[0][0])))
+    fig, ax = plt.subplots(2, 4, figsize=(10, 7))
+    fig2, ax2 = plt.subplots(2, 4, figsize=(10, 7))
+    ax = ax.flatten()
+    ax2 = ax2.flatten()
+    # Each directory is a temperature
+    for i in range(len(directories)):
+        pth = pth_base + directories[i]
+        for j in range(len(resonators)):
+            output, power = [], []
+
+            # for k in range(1):
+            for k in range(len(file_list[i][j])):  # power
+                fname = file_list[i][j][k]
+                try:
+                    data, attrs = load_resonator(
+                        fname, pth, nfiles, slope, meas_type, ends, fix_freq=True
+                    )
+                    # data = fit_phase(data)
+                except:
+                    traceback.print_exc()
+                    continue
+                if meas_type == "vna":
+                    if data["vna_power"][0] < min_power:
+                        continue
+                    power.append(data["vna_power"][0])
+                    print(power[-1])
+                else:
+                    if attrs["gain"] < min_power:
+                        continue
+
+                    power.append(np.log10(attrs["gain"]) * 20 - 30)
+
+                    print(power[-1])
+                data = norm_data(data)
+                output.append(
+                    cf.circlefit(
+                        data["freqs"], data["x"], data["y"], print_results=False
+                    )
+                )
+            res_params = stow_data_oth(output, res_params, j, power)
+            fig.tight_layout()
+            fig2.tight_layout()
+            fig2.savefig(
+                output_path + name + "_" + directories[i] + "_all_data_phase.png",
+                dpi=300,
+            )
+            fig.savefig(
+                output_path + name + "_" + directories[i] + "_all_data_amp.png", dpi=300
+            )
+
+    for i in range(len(resonators)):
+        for key in res_params[i].keys():
+            res_params[i][key] = np.array(res_params[i][key])
+    return file_list, res_params
