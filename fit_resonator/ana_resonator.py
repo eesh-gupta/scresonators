@@ -3,6 +3,7 @@ import re
 import time
 import traceback
 from collections import Counter
+from scipy.interpolate import interp1d
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -139,24 +140,29 @@ def check_phase(data):
 
 def grab_data(pth, fname, meas_type="vna", slope=0):
     data, attrs = hy.prev_data(pth, fname)
-
     # Reformat data for scres package
     if meas_type == "vna":
         data["phases"] = np.unwrap(data["phases"][0])
         data["phases"] = check_phase(data["phases"])
         data["freqs"] = data["fpts"][0]
         data["amps"] = data["mags"][0]
+        data["phases"] = data["phases"] - slope * data["freqs"]
     elif meas_type == "soc":
         # slope = np.polyfit(data['xpts'][0], np.unwrap(data['phases'][0]), 1)
         data["phases"] = np.unwrap(data["phases"])
-        if (
-            data["phases"][0][-1] < data["phases"][0][-2] < data["phases"][0][-3]
-            or data["phases"][0][2] < data["phases"][0][1] < data["phases"][0][0]
-        ):
+        if True:  # np.floor(data["xpts"][0][0] / fny) % 2 == 0:
             data["phases"] = data["phases"][0] + slope * data["xpts"][0]
-            # data["phases"] = -data["phases"][0] - slope * data["xpts"][0]
         else:
             data["phases"] = data["phases"][0] - slope * data["xpts"][0]
+
+        # if (
+        #     data["phases"][0][-1] < data["phases"][0][-2] < data["phases"][0][-3]
+        #     or data["phases"][0][2] < data["phases"][0][1] < data["phases"][0][0]
+        # ):
+        #     data["phases"] = data["phases"][0] + slope * data["xpts"][0]
+        #     # data["phases"] = -data["phases"][0] - slope * data["xpts"][0]
+        # else:
+        #     data["phases"] = data["phases"][0] - slope * data["xpts"][0]
         data["phases"] = np.unwrap(data["phases"])
         data["amps"] = np.log10(data["amps"][0]) * 20
         data["freqs"] = data["xpts"][0] * 1e6
@@ -195,13 +201,12 @@ def fit_phase(data):
     return data
 
 
-def combine_data(data1, data2, fix_freq=True):
+def combine_data(data1, data2, fix_freq=True, meas_type="soc"):
     data = {}
     mp = np.mean(data1["phases"])
     data1["phases"] = data1["phases"] - mp
     data2["phases"] = data2["phases"] - mp
     if fix_freq:
-        from scipy.interpolate import interp1d
 
         phase_interp = interp1d(
             data1["freqs"], data1["phases"], fill_value="extrapolate"
@@ -218,6 +223,8 @@ def combine_data(data1, data2, fix_freq=True):
         data[key] = data[key][inds]
 
     data["phases"] = np.unwrap(data["phases"])
+    if meas_type == "vna":
+        data["vna_power"] = data1["vna_power"]
     return data
 
 
@@ -370,11 +377,11 @@ def analyze_sweep_gen(
                     )
                     # data = norm_data(data)
                 except:
-                    traceback.print_exc()
+                    # traceback.print_exc()
                     continue
 
                 # Skip really noisy ones since they are slow
-                if type == "vna":
+                if meas_type == "vna":
                     if data["vna_power"][0] < min_power:
                         continue
                     power.append(data["vna_power"][0])
@@ -387,16 +394,16 @@ def analyze_sweep_gen(
 
                     print(power[-1])
 
-                # try:
-                output = fit_resonator(
-                    data, file_list[i][j][k], output_path, plot=plot, fix_freq=True
-                )
-                params.append(output[0])
-                err.append(output[1])
-                # except Exception as error:
-                #    print("An exception occurred:", error)
-                #    params.append(np.nan * np.ones(4))
-                #    err.append(np.nan * np.ones(6))
+                try:
+                    output = fit_resonator(
+                        data, file_list[i][j][k], output_path, plot=plot, fix_freq=True
+                    )
+                    params.append(output[0])
+                    err.append(output[1])
+                except Exception as error:
+                    print("An exception occurred:", error)
+                    params.append(np.nan * np.ones(4))
+                    err.append(np.nan * np.ones(6))
             res_params = stow_data(params, res_params, j, power, err)
 
             print("Time elapsed: ", time.time() - start)
@@ -683,11 +690,11 @@ def load_resonator(fname, pth, nfiles, slope, meas_type, ends, fix_freq):
     if nfiles > 1:
         file2 = fname.replace(ends[0], ends[1])
         data2, _ = grab_data(pth, file2, meas_type, slope)
-        data = combine_data(data1, data2, fix_freq)
+        data = combine_data(data1, data2, fix_freq, meas_type)
     if nfiles > 2:
         file3 = fname.replace(ends[0], ends[2])
         data3, _ = grab_data(pth, file3, meas_type, slope)
-        data = combine_data(data, data3, fix_freq)
+        data = combine_data(data, data3, fix_freq, meas_type)
 
     return data, attrs
 

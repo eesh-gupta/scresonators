@@ -149,7 +149,7 @@ def fit_qi(
 
     fig.tight_layout()
     try:
-        fig.savefig(base_pth + cfg["res_name"] + "_qi.png", dpi=300)
+        fig.savefig(base_pth + cfg["meas"][0] + "_qi.png", dpi=300)
     except:
         pass
 
@@ -201,6 +201,7 @@ def plot_res_pars(params_list, labs, base_pth):
             yerr=params["qother_err"] / 1e6,
             fmt=".",
         )
+        ax[2].set_yscale("log")
         ax[3].errorbar(params["pitch"], params["nc"], yerr=params["nc_err"], fmt=".")
         ax[4].errorbar(
             params["pitch"], params["beta"], yerr=params["beta_err"], fmt="."
