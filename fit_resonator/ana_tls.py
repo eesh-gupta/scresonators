@@ -60,6 +60,7 @@ def fit_qi(
     base_pth,
     min_power_vec=None,
     max_power_vec=None,
+    name=None,
     bounds=([0, 0, 0, 0], [1e8, 3e7, 1e6, 5]),
 ):
 
@@ -68,6 +69,8 @@ def fit_qi(
     plt.rcParams["lines.markersize"] = 6
     min_power = cfg["min_power"]
     max_power = cfg["max_power"]
+    if name is None:
+        name = cfg["meas"][0]
 
     fig, ax = plt.subplots(3, 3, figsize=(10, 9))
     ax = ax.flatten()
@@ -149,7 +152,7 @@ def fit_qi(
 
     fig.tight_layout()
     try:
-        fig.savefig(base_pth + cfg["meas"][0] + "_qi.png", dpi=300)
+        fig.savefig(base_pth + name + "_qi.png", dpi=300)
     except:
         pass
 
@@ -170,16 +173,18 @@ def fit_qi(
     return cfg
 
 
-def plot_res_pars(params_list, labs, base_pth):
+def plot_res_pars(params_list, labs, base_pth, name=None):
     plt.rcParams["lines.markersize"] = 10
     sns.set_palette(colors)
-    fig, ax = plt.subplots(2, 3, figsize=(10, 6), sharex=True)
+    fig, ax = plt.subplots(2, 3, figsize=(10, 6))
     ax = ax.flatten()
-    fnames = ""
     i = 0
+    if name is not None:
+        fnames = name + "_"
     for params, l in zip(params_list, labs):
         try:
-            fnames += params["res_name"] + "_"
+            if name is None:
+                fnames += params["meas"] + "_"
         except:
             pass
         ax[0].errorbar(

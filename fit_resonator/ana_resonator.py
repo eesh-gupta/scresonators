@@ -194,7 +194,7 @@ def fit_phase(data):
     inds = np.where(data["freqs"] > np.max(data["freqs"]) - 0.2 * freq_range)
     mf = np.mean(data["freqs"])
     slope = np.polyfit(data["freqs"][inds] - mf, data["phases"][inds], 1)
-    print(slope[0])
+    # print(slope[0])
     data["phases"] = data["phases"] - slope[0] * (data["freqs"] - mf) - slope[1]
     data["phases"] = np.unwrap(data["phases"])
 
@@ -336,7 +336,8 @@ def analyze_sweep_gen(
     min_power=-120,
     meas_type="vna",
     slope=0,
-    fix_freq=False,
+    fix_freq=True,
+    fitphase=False,
 ):
     resonators, file_list, ends = resonator_list(
         directories, pth_base, nfiles, meas_type
@@ -375,6 +376,8 @@ def analyze_sweep_gen(
                     data, attrs = load_resonator(
                         fname, pth, nfiles, slope, meas_type, ends, fix_freq=True
                     )
+                    if fitphase:
+                        data = fit_phase(data)
                     # data = norm_data(data)
                 except:
                     # traceback.print_exc()
@@ -391,6 +394,7 @@ def analyze_sweep_gen(
                         continue
 
                     power.append(np.log10(attrs["gain"]) * 20 - 30)
+                    # power.append(attrs["gain"])
 
                     print(power[-1])
 
@@ -588,7 +592,7 @@ def plot_power_temp(res_params, i, cfg, base_pth, use_cbar=False, xval="temp"):
     fig.savefig(base_pth + cfg["res_name"] + "_Qi_pow_" + str(i) + ".png", dpi=300)
 
 
-def plot_res_pars(params_list, labs, base_pth):
+def plot_res_pars(params_list, labs, base_pth, name=None):
     fig, ax = plt.subplots(1, 3, figsize=(10, 3.5), sharex=True)
     ax = ax.flatten()
     fnames = ""
@@ -597,11 +601,15 @@ def plot_res_pars(params_list, labs, base_pth):
     ax[1].set_ylabel("Frequency/Designed Freq")
     ax[2].set_ylabel("Phase (rad)")
 
+    if name is not None:
+        fnames = name + "_"
     for params, l in zip(params_list, labs):
         try:
-            fnames += params["res_name"] + "_"
+            if name is None:
+                fnames += params["meas"] + "_"
         except:
             pass
+
         ax[0].plot(params["pitch"], params["freqs"] / 1e9, ".", label=l)
         ax[1].plot(
             params["pitch"],
@@ -736,7 +744,7 @@ def plot_all(
                     data, _ = load_resonator(
                         fname, pth, nfiles, slope, meas_type, ends, fix_freq=True
                     )
-                    # data = fit_phase(data)
+                    data = fit_phase(data)
                 except:
                     traceback.print_exc()
                     continue
