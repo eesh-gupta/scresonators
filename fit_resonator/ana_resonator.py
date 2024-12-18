@@ -645,16 +645,16 @@ def resonator_list(directories, pth_base, nfiles, meas_type):
         else:
             pattern_end = "_"
             ends = ["wideleft", "narrow", "wideright"]
-        pattern0 = r"res_(\d+)_\d{2,5}" + pattern_end + ends[0]
+        pattern0 = r"res_(\d+)_-?\d{1,5}" + pattern_end + ends[0]
     elif nfiles == 2:
-        pattern0 = r"res_(\d+)_\d{2,5}dbm_wide"
+        pattern0 = r"res_(\d+)_-?\d{1,5}dbm_wide"
         ends = []
     else:
         if meas_type == "vna":
             pattern_end = "dbm"
         else:
             pattern_end = ""
-        pattern0 = r"res_(\d+)_\d{2,5}" + pattern_end
+        pattern0 = r"res_(\d+)_-?\d{1,5}" + pattern_end
         ends = [""]
 
     resonators, _ = get_resonators(directories[0], pth_base, pattern0)
@@ -668,16 +668,16 @@ def resonator_list(directories, pth_base, nfiles, meas_type):
             if nfiles == 3:
                 pattern = (
                     "res_{:d}_".format(resonators[j])
-                    + "(\d{2,5})"
+                    + "(-?\d{1,5})"
                     + pattern_end
                     + ends[0]
                 )
             elif nfiles == 2:
-                pattern = "res_{:d}_".format(resonators[j]) + "(\d{2,3})dbm_wide"
+                pattern = "res_{:d}_".format(resonators[j]) + "(-?\d{1,3})dbm_wide"
             else:
                 pattern = (
                     "res_{:d}_".format(resonators[j])
-                    + "(\d{2,5})"
+                    + "(-?\d{1,5})"
                     + pattern_end
                     + ends[0]
                 )
