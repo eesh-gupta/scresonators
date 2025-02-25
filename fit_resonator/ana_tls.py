@@ -101,8 +101,8 @@ def fit_qi(
         if max_power_vec is not None:
             max_power = max_power_vec[i]
         inds = np.where(
-            (res_params[i]["pow"][j, :] > min_power)
-            & (res_params[i]["pow"][j, :] < max_power)
+            (res_params[i]["pow"][j, :] >= min_power)
+            & (res_params[i]["pow"][j, :] <= max_power)
         )
         nn_fit = nn[inds]
         qi_fit = res_params[i]["qi"][j, :][inds]
