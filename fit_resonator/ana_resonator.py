@@ -807,13 +807,13 @@ def plot_all(
 
             fig.tight_layout()
             fig2.tight_layout()
-            fig2.savefig(
-                output_path + name + "_" + directories[i] + "_all_data_phase.png",
-                dpi=300,
-            )
-            fig.savefig(
-                output_path + name + "_" + directories[i] + "_all_data_amp.png", dpi=300
-            )
+            # fig2.savefig(
+            #     output_path + name + "_" + directories[i] + "_all_data_phase.png",
+            #     dpi=300,
+            # )
+            # fig.savefig(
+            #     output_path + name + "_" + directories[i] + "_all_data_amp.png", dpi=300
+            # )
     return file_list
 
 

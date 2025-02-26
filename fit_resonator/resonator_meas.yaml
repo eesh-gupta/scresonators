@@ -446,7 +446,7 @@ silicon3b:
 silicon4a:
   atten: -50
   dir:
-  - - ResAsample1_power_sweep_4/
+  - - ResAsample1_power_sweep_7/
   flip: true
   max_power: 5
   meas:
