@@ -120,15 +120,15 @@ def do_vna_scan(VNA, file_name, expt_path, cfg, spar, att=0, plot=True):
 def plot_scan(freq, amps, phase, pars=None, pinit=None, power=None, slope=None):
 
     fig, ax = plt.subplots(1, 3, figsize=(12, 4))
-    ax[0].plot(freq, amps, "k.", markersize=3)
+    ax[0].plot(freq / 1e6, amps, "k.", markersize=3)
     ax[0].set_xlabel("Frequency (MHz)")
     ax[0].set_ylabel("Amplitude")
     if pars is not None:
         q = 1 / (1 / pars[1] + 1 / pars[2]) * 1e4
         qi = pars[1] * 1e4
         lab = f"$Q$={q:.3g},\n $Q_i$={qi:.3g}"
-        ax[0].plot(freq, fitter.hangerS21func_sloped(freq, *pars), label=lab)
-        ax[0].plot(freq, fitter.hangerS21func_sloped(freq, *pinit))
+        ax[0].plot(freq / 1e6, fitter.hangerS21func_sloped(freq, *pars), label=lab)
+        ax[0].plot(freq / 1e6, fitter.hangerS21func_sloped(freq, *pinit))
     ax[0].set_title(f"Power: {power:.1f} dB")
     if slope is None:
         phase = np.unwrap(phase)
@@ -136,10 +136,15 @@ def plot_scan(freq, amps, phase, pars=None, pinit=None, power=None, slope=None):
         phase_sub = phase - slope * freq - of
     else:
         phase_sub = phase - slope * freq
-    ax[1].plot(freq, np.unwrap(phase_sub), "k.-", markersize=3)
+    ax[1].plot(
+        freq / 1e6,
+        np.unwrap(phase_sub) - np.mean(np.unwrap(phase_sub)),
+        "k.-",
+        markersize=3,
+    )
     ax[1].set_xlabel("Frequency (MHz)")
     ax[1].set_ylabel("Phase")
-    ax[0].legend()
+    ax[0].legend(loc="lower right")
     ax2 = ax[0].twinx()
     if pars is not None:
         ax2.set_ylim(ax[0].get_ylim()[0] / pars[4], ax[0].get_ylim()[1] / pars[4])
@@ -147,6 +152,7 @@ def plot_scan(freq, amps, phase, pars=None, pinit=None, power=None, slope=None):
 
     ax[2].plot(amps * np.cos(phase_sub), amps * np.sin(phase_sub), "k.-")
     fig.tight_layout()
+    plt.show()
 
 
 def power_sweep(config, VNA):
@@ -200,7 +206,8 @@ def power_sweep(config, VNA):
     # Initialize lists for results
     pars_list = [[] for i in range(len(freqs0))]
     avg_list = [[] for i in range(len(freqs0))]
-    qi_list = []
+    qi_list = [[] for i in range(len(freqs0))]
+    pars = [[] for i in range(len(freqs0))]
     pow_list = []
 
     # Get attenuation value (if provided)
@@ -228,7 +235,7 @@ def power_sweep(config, VNA):
                 vna_config = {
                     "freq_center": float(freqs[j]),
                     "span": float(spans[j]) * 1.3,
-                    "nb_points": 500,
+                    "nb_points": 800,
                     "power": power,
                     "bandwidth": config["bandwidth"],
                     "averages": int(curr_avg),
@@ -242,8 +249,9 @@ def power_sweep(config, VNA):
 
                 # Fit resonator to find center frequency and kappa
                 min_freq = freqs[j]  # Initial guess
-                fitparams = [min_freq, 10, 10, 0, np.max(data["amps"]), 0]
-                freqs[j], q, kappa, pars = fit_resonator(data, fitparams, power)
+                # f0, Qi, Qe, phi, scale, a0, slope
+
+                freqs[j], q, kappa, pars[j] = fit_resonator(data, power)
                 spans[j] = kappa * config["span_inc"]
 
             # Configure VNA scan for this power point
@@ -264,25 +272,31 @@ def power_sweep(config, VNA):
 
             # Fit data to find resonator parameters
             min_freq = freqs[j]  # Use previous frequency as initial guess
-            fitparams = [min_freq, pars[1], pars[2], pars[3], np.max(data["amps"]), 0]
-            freqs[j], q, kappa, pars = fit_resonator(
-                data, fitparams, config["slope"][j], power
-            )
+            fitparams = [
+                min_freq,
+                pars[j][1],
+                pars[j][2],
+                pars[j][3],
+                np.max(10 ** (data["amps"] / 20)),
+                0,
+            ]
+            freqs[j], q, kappa, pars[j] = fit_resonator(data, power, fitparams)
             pars_list[j].append(pars)
 
             # Calculate photon number (if needed)
-            pin = config["power_start"] - config["att"]
-            nph = n(pin, pars[0], q, pars[2])
-            # power in, frequency in Hz, quality factor, internal quality factor
+            pin = power - config["att"]
+            nph = n(pin, pars[j][0], q, pars[j][2] * 1e4)
+
+            # power in, frequency in Hz, quality factor, external quality factor
 
             # Plot Qi vs power
-            plt.figure(figsize=(4, 4))
-            qi = pars[1] * 1e4
-            qi_list.append(qi)
-            plt.plot(-pows[: i + 1], qi_list, "o-")
+            plt.figure(figsize=(4, 3))
+            qi = pars[j][1] * 1e4
+            qi_list[j].append(qi)
+            plt.plot(pows[: i + 1], qi_list[j], "o-")
             plt.xlabel("Power (dBm)")
             plt.ylabel("Internal Quality Factor (Qi)")
-            plt.title(f"Frequency: {freqs[j]:.2f} MHz")
+            plt.title(f"Frequency: {freqs[j]/1e9:.5f} GHz")
             plt.show()
 
             # Calculate new averaging based on photon number
@@ -290,7 +304,7 @@ def power_sweep(config, VNA):
             if "avg_corr" in config:
                 new_avgs[j] = np.round(config["avg_corr"] / nph)
                 print(
-                    f"Pin {pin-power:.3f}, N photons: {nph:.3g}, navg: {new_avgs[j]:1f}"
+                    f"Pin {power-config['att']:.3f}, N photons: {nph:.3g}, navg: {new_avgs[j]:1f}"
                 )
 
             # Update span for next measurement
@@ -299,26 +313,23 @@ def power_sweep(config, VNA):
     return pars_list
 
 
-def fit_resonator(data, fitparams, slope, power):
+def fit_resonator(data, power, fitparams=None):
 
-    pars, err, pinit = fitter.fithanger(
-        data["freqs"], data["amps"], fitparams=fitparams
-    )
     # Convert amplitude from dB to linear scale
     amps_linear = 10 ** (data["amps"] / 20)
+    if fitparams is None:
+        min_freq = data["freqs"][np.argmin(amps_linear)]
+        fitparams = [min_freq, 100, 100, 0, np.max(amps_linear), 0]
+    pars, err, pinit = fitter.fithanger(data["freqs"], amps_linear, fitparams=fitparams)
 
-    # Create complex number from amplitude and phase
-    complex_data = amps_linear * np.exp(1j * data["phases"])
-
-    pars, err, pinit = fitter.fithanger(data["freqs"], data["amps"], fitparams=pars)
+    pars, err, pinit = fitter.fithanger(data["freqs"], amps_linear, fitparams=pars)
     plot_scan(
         data["freqs"],
-        data["amps"],
+        amps_linear,
         data["phases"],
         pars,
-        pinit,
+        fitparams,
         power,
-        slope=slope,
     )
     freq_center = pars[0]
     q = 1 / (1 / pars[1] + 1 / pars[2]) * 1e4
@@ -354,20 +365,20 @@ def get_default_power_sweep_config(custom_config=None):
         "base_path": "./data",
         "folder": f"power_sweep_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
         # Frequency settings
-        "freqs": [6],  # Default center frequency in MHz
-        "span_inc": 7.5,  # Span as multiple of linewidth
-        "kappa_start": 70000,  # Initial linewidth estimate in Hz
+        "freqs": np.array([6]) * 1e9,  # Default center frequency in Hz
+        "span_inc": 8,  # Span as multiple of linewidth
+        "kappa_start": 30000,  # Initial linewidth estimate in Hz
         # Power sweep settings
-        "nvals": 16,  # Number of power points
-        "pow_start": -20,  # Starting power in dBm
-        "pow_inc": 5,  # Power increment in dB
+        "nvals": 18,  # Number of power points
+        "pow_start": -5,  # Starting power in dBm
+        "pow_inc": -5,  # Power increment in dB
         # Measurement settings
-        "npoints": 301,  # Number of frequency points
+        "npoints": 201,  # Number of frequency points
         "bandwidth": 300,  # Measurement bandwidth in Hz
-        "averages": 10,  # Number of averages
+        "averages": 1,  # Number of averages
         "att": 60,  # Attenuation in dB
         # Analysis settings
-        "avg_corr": 1e5,  # Correction factor for averaging
+        "avg_corr": 2e7,  # Correction factor for averaging
     }
 
     # Override defaults with custom values if provided
@@ -400,10 +411,11 @@ def example_power_sweep():
     custom_config = {
         "base_path": os.path.expanduser("~/data"),  # Save to user's home directory
         "freqs": [5800, 6200],  # Scan two frequencies
-        "nvals": 5,  # Use 5 power points
-        "pow_start": -20,  # Start at -40 dBm
+        "nvals": 18,  # Use 5 power points
+        "pow_start": -10,  # Start at -40 dBm
         "pow_inc": 5,  # 5 dB steps
-        "averages": 20,  # More averages for better SNR
+        "npoints": 401,  # More frequency points for better resolution
+        "averages": 1,  # More averages for better SNR
     }
 
     # Update default config with custom values

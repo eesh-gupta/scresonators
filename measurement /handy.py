@@ -1,4 +1,4 @@
-from slab.datamanagement import SlabFile
+from datamanagement import SlabFile
 import re
 import json
 import numpy as np
