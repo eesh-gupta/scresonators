@@ -10,7 +10,7 @@ import copy
 import scipy.constants as cs
 
 
-def do_vna_scan(VNA, file_name, expt_path, cfg, spar, att=0, plot=True):
+def do_vna_scan(VNA, file_name, expt_path, cfg, spar="s21", att=0, plot=True):
     """
     Perform a VNA scan and save the data to a file.
 
@@ -214,8 +214,9 @@ def power_sweep(config, VNA):
     att = config["att"]
 
     # Perform power sweep
-    for i, power in enumerate(pows):
-        for j in range(len(freqs)):
+    
+    for j in range(len(freqs)):
+        for i, power in enumerate(pows):
             # Set initial averaging for first power point
             if i == 0:
                 new_avgs[j] = 1
@@ -259,6 +260,8 @@ def power_sweep(config, VNA):
                 "freq_center": float(freqs[j]),
                 "span": float(spans[j]),
                 "nb_points": config["npoints"],
+                "npoints1": config["npoints1"],
+                "npoints2": config["npoints2"],
                 "power": power,
                 "bandwidth": config["bandwidth"],
                 "averages": int(curr_avg),
@@ -266,9 +269,14 @@ def power_sweep(config, VNA):
 
             # Perform VNA scan
             file_name = f"res_{fname}_{pow_name}dbm.h5"
-            data = do_vna_scan(
-                VNA, file_name, expt_path, vna_config, "S21", att=att, plot=False
-            )
+            if config["type"] == "lin":
+                data = do_vna_scan(
+                    VNA, file_name, expt_path, vna_config, "S21", att=att, plot=False
+                )
+            else:
+                data = do_vna_scan_segments(
+                    VNA, file_name, expt_path, vna_config, spar="s21", plot=False
+                )
 
             # Fit data to find resonator parameters
             min_freq = freqs[j]  # Use previous frequency as initial guess
@@ -366,7 +374,7 @@ def get_default_power_sweep_config(custom_config=None):
         "folder": f"power_sweep_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
         # Frequency settings
         "freqs": np.array([6]) * 1e9,  # Default center frequency in Hz
-        "span_inc": 8,  # Span as multiple of linewidth
+        "span_inc": 9,  # Span as multiple of linewidth
         "kappa_start": 30000,  # Initial linewidth estimate in Hz
         # Power sweep settings
         "nvals": 18,  # Number of power points
@@ -374,11 +382,14 @@ def get_default_power_sweep_config(custom_config=None):
         "pow_inc": -5,  # Power increment in dB
         # Measurement settings
         "npoints": 201,  # Number of frequency points
+        "npoints1": 10,
+        "npoints2": 30,
         "bandwidth": 300,  # Measurement bandwidth in Hz
         "averages": 1,  # Number of averages
         "att": 60,  # Attenuation in dB
+        "type": "lin",
         # Analysis settings
-        "avg_corr": 2e7,  # Correction factor for averaging
+        "avg_corr": 1e7,  # Correction factor for averaging
     }
 
     # Override defaults with custom values if provided
@@ -440,7 +451,7 @@ def example_power_sweep():
 
 
 def do_vna_scan_segments(
-    VNA, file_name, expt_path, cfg, warm_att=0, cold_att=0, plot=True
+    VNA, file_name, expt_path, cfg, spar="s21", warm_att=0, cold_att=0, plot=True
 ):
     """
     Perform a VNA scan with segmented frequency ranges and save the data to a file.
@@ -487,11 +498,11 @@ def do_vna_scan_segments(
         power = cfg["power"]
 
         # Prepare trace and scattering parameter
-        scattering_parameter = ("S21",)
+        scattering_parameter = (spar,)
         trace_name = ("trace1",)
 
         # Define segment width ratio (center segment width / total span)
-        wid = 0.35
+        wid = 0.25
 
         # Calculate point spacing for smooth transitions between segments
         pt_spc = cfg["span"] * (1 - wid) / 2 / cfg["npoints1"]
@@ -517,15 +528,15 @@ def do_vna_scan_segments(
         freq_sweep = np.concatenate((freq_sweep0, freq_sweep1, freq_sweep2))
 
         # Initialize VNA
-        VNA.initialize_one_tone_spectroscopy(trace_name, scattering_parameter)
+        VNA.initialize_one_tone_spectroscopy_seg(trace_name, scattering_parameter)
 
         # Define sweep type
-        swp_typ = "sweeptime"
+        swp_typ = "dwell"
 
         # Configure VNA segments
         # Segment 0: Lower frequency range
         VNA.define_segment(
-            0,
+            1,
             freq_center - cfg["span"] / 2,
             freq_center - wid / 2 * cfg["span"] - pt_spc,
             cfg["npoints1"],
@@ -537,7 +548,7 @@ def do_vna_scan_segments(
 
         # Segment 1: Center frequency range (higher resolution)
         VNA.define_segment(
-            1,
+            2,
             freq_center - wid * cfg["span"] / 2,
             freq_center + wid * cfg["span"] / 2,
             cfg["npoints2"],
@@ -549,7 +560,7 @@ def do_vna_scan_segments(
 
         # Segment 2: Upper frequency range
         VNA.define_segment(
-            2,
+            3,
             freq_center + wid / 2 * cfg["span"] + pt_spc,
             freq_center + cfg["span"] / 2,
             cfg["npoints1"],
@@ -562,7 +573,7 @@ def do_vna_scan_segments(
         # Set averaging parameters
         VNA.set_averages(cfg["averages"])
         VNA.set_averagestatus(status="on")
-        VNA.set_sweeps(1)
+        VNA.set_sweeps(cfg["averages"])
 
         # Calculate actual power at device
         power_at_device = cfg["power"] - warm_att - cold_att
@@ -602,8 +613,7 @@ def do_vna_scan_segments(
 
         # Plot data if requested
         if plot:
-            plot_amp(data, filepath=expt_path)
-            plot_unwrapped_phase(data, filepath=expt_path)
+            plot_all(data, filepath=expt_path)
 
         return data
 
