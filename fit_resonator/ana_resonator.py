@@ -30,7 +30,7 @@ from scipy.interpolate import interp1d
 import meas_analysis.handy as hy
 import scresonators.fit_resonator.fit as scfit
 import scresonators.fit_resonator.resonator as scres
-import pyCircFit_v3 as cf
+#import pyCircFit_v3 as cf
 
 # Define a consistent color palette for plots
 COLORS = ["#4053d3", "#b51d14", "#ddb310", "#658b38", "#7e1e9c", "#75bbfd", "#cacaca"]
@@ -391,7 +391,7 @@ class ResonatorData:
             ends = []
         else:
             if meas_type == "vna":
-                pattern_end = "dbm"
+                pattern_end = "dbm.h5"
             else:
                 pattern_end = ""
             pattern0 = r"res_(\d+)_-?\d{1,5}" + pattern_end

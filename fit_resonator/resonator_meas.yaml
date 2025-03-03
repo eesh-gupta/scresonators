@@ -446,7 +446,7 @@ silicon3b:
 silicon4a:
   atten: -50
   dir:
-  - - ResAsample1_power_sweep_7/
+  - - power_sweep_20250302_193605/
   flip: true
   max_power: 5
   meas:
@@ -468,7 +468,7 @@ silicon4a:
   - 6
   - 8
   pth: 
-  - 022125_Resonator/
+  - 250227-ResSil4X/
   target_freq:
   - 6.08
   - 6.4

@@ -429,7 +429,9 @@ class ZNB20(SocketInstrument):
     #           Functions related to Segmented sweeps
     #
     #########################################################
-
+    def delete_segments(self):  
+        self.write("SEGM:DEL:ALL")
+        
     def define_segment(
         self,
         segment_number,
@@ -553,7 +555,7 @@ class ZNB20(SocketInstrument):
                 print("error in setting the bandwidth")
 
         else:
-            print("set_time should be dweel or sweeptime")
+            print("set_time should be dwell or sweeptime")
 
     def define_power_sweep(
         self, startpow, stoppow, steppow, cwfrequency, BW, time, set_time="dwell"
