@@ -343,18 +343,18 @@ def hangerS21func(x, *p):
     Q0 = 1 / (1/Qi + np.real(1/Qe))
     
     #return a0 + np.abs(hangerfunc(x, *p)) - scale*(1-Q0/Qe)
-    return np.abs(hangerfunc(x, *p)) 
+    return np.abs(hangerfunc(x, f0, 1e4*Qi, 1e4*Qe, phi, scale)) 
 
 def hangerS21func_sloped(x, *p):
     f0, Qi, Qe, phi, scale, slope = p
     #return hangerS21func(x, f0, 1e4*Qi, 1e4*Qe, phi, scale)
-    return hangerS21func(x, f0, 1e4*Qi, 1e4*Qe, phi, scale) + slope*(x-f0)
+    return hangerS21func(x, f0, Qi, Qe, phi, scale) + slope*(x-f0)
 
 def hangerphasefunc(x, *p):
     return np.angle(hangerfunc(x, *p))
 
 def fithanger(xdata, ydata, fitparams=None):
-    # f0, Qi, Qe, phi, scale, a0, slope
+    # f0, Qi, Qe, phi, scale, a0
     if fitparams is None: fitparams = [None]*6
     if fitparams[0] is None: 
         fitparams[0]=xdata[np.argmin(np.abs(ydata))] #f0
@@ -362,7 +362,7 @@ def fithanger(xdata, ydata, fitparams=None):
     if fitparams[2] is None: fitparams[2]=3 #Qe
     if fitparams[3] is None: fitparams[3]=0 #phi
     if fitparams[4] is None: fitparams[4]=max(ydata) # scale
-    if fitparams[5] is None: fitparams[5]=0 #(ydata[-1] - ydata[0]) / (xdata[-1] - xdata[0])
+    #if fitparams[5] is None: fitparams[5]=0 #(ydata[-1] - ydata[0]) / (xdata[-1] - xdata[0])
     #print(fitparams)
 
     # bounds = (
@@ -370,8 +370,8 @@ def fithanger(xdata, ydata, fitparams=None):
     #     [np.max(xdata), 1e9, 1e9, 2*np.pi, (max(np.abs(ydata))-min(np.abs(ydata)))*10, np.max(np.abs(ydata))]
     #     )
     bounds = (
-        [np.min(xdata),      0,      0, -np.inf, 0,       -np.inf],
-        [np.max(xdata), np.inf, np.inf,  np.inf, np.inf,  np.inf],
+        [np.min(xdata),      0,      0, -np.inf, 0,     ],
+        [np.max(xdata), np.inf, np.inf,  np.inf, np.inf],
         )
     for i, param in enumerate(fitparams):
         if not (bounds[0][i] < param < bounds[1][i]):
@@ -382,7 +382,7 @@ def fithanger(xdata, ydata, fitparams=None):
     
     pCov = np.full(shape=(len(fitparams), len(fitparams)), fill_value=np.inf)
     try:
-        pOpt, pCov = sp.optimize.curve_fit(hangerS21func_sloped, xdata, ydata, p0=fitparams, bounds=bounds)
+        pOpt, pCov = sp.optimize.curve_fit(hangerS21func, xdata, ydata, p0=fitparams, bounds=bounds)
         #print(pOpt)
         pOpt[1]=pOpt[1]
         pOpt[2]=pOpt[2]

@@ -132,8 +132,8 @@ def plot_scan(freq, amps, phase, pars=None, pinit=None, power=None, slope=None):
         qi = pars[1] * 1e4
         qc = pars[2] * 1e4
         lab = f"$Q$={q:.3g}\n $Q_i$={qi:.3g} \n $Q_c$={qc:.3g}"
-        ax[0].plot(freq / 1e6, fitter.hangerS21func_sloped(freq, *pars))
-        #ax[0].plot(freq / 1e6, fitter.hangerS21func_sloped(freq, *pinit))
+        ax[0].plot(freq / 1e6, fitter.hangerS21func(freq, *pars))
+        ax[0].plot(freq / 1e6, fitter.hangerS21func(freq, *pinit))
     ax[0].set_title(f"Power: {power:.1f} dB")
     if slope is None:
         phase = np.unwrap(phase)
@@ -266,9 +266,7 @@ def power_sweep(config, VNA):
 
                 freqs[j], q, kappa, pars[j] = fit_resonator(data, power)
                 output_path = os.path.join(expt_path)
-                ResonatorFitter.fit_resonator(
-                                        data, fname, output_path, plot=True, fix_freq=False
-                                    )
+               
                 spans[j] = kappa * config["span_inc"]
 
             
@@ -308,15 +306,16 @@ def power_sweep(config, VNA):
 
             # Fit data to find resonator parameters
             min_freq = freqs[j]  # Use previous frequency as initial guess
-            
+            if i>0:
+                q_old = q
+
             if i<6:
                 fitparams = [
                 min_freq,
                 pars[j][1],
                 pars[j][2],
                 pars[j][3],
-                np.max(10 ** (data["amps"] / 20)),
-                0,
+                np.max(10 ** (data["amps"] / 20))
             ]
                 freqs[j], q, kappa, pars[j] = fit_resonator(data, power, fitparams)
             else:
@@ -324,22 +323,29 @@ def power_sweep(config, VNA):
                 min_freq,
                 pars[j][1],
                 pars[j][3],
-                np.max(10 ** (data["amps"] / 20)),
-                0,
+                np.max(10 ** (data["amps"] / 20))
             ]
                 qc_best = np.mean(qc_list[j][1:5])
                 freqs[j], q, kappa, pars[j] = fit_resonator(data, power, fitparams, qc_best)
-            output = ResonatorFitter.fit_resonator(
-                                    data, fname, output_path, plot=True, fix_freq=False
-                                )
-            q2 = output[0][0]
-            qc2 = output[0][1]
-            freq2 = output[0][2]
-            qi2 = 1/(1/q2-1/qc2)
-            q2_list[j].append(q2)
-            qc2_list[j].append(qc2)
-            freq2_list[j].append(freq2)
-            qi2_list[j].append(qi2)
+            try:
+                mmm=1
+                # output = ResonatorFitter.fit_resonator(
+                #                         data, fname, output_path, plot=True, fix_freq=False
+                #                     )
+                # q2 = output[0][0]
+                # qc2 = output[0][1]
+                # freq2 = output[0][2]
+                qi2 = 1/(1/q2-1/qc2)
+                q2_list[j].append(q2)
+                qc2_list[j].append(qc2)
+                freq2_list[j].append(freq2)
+                qi2_list[j].append(qi2)
+            except:
+                q2=np.nan
+                qc2=np.nan
+                freq2=np.nan
+            
+            
             pars_list[j].append(pars)
             if i<6:
                 qc = pars[j][2] * 1e4
@@ -360,7 +366,7 @@ def power_sweep(config, VNA):
             qi_list[j].append(qi)
             nph_list[j].append(nph)
             ax[0].semilogx(nph_list[j], qi_list[j], "o-")
-            ax[0].semilogx(nph_list[j], qi2_list[j], "o-")
+            #ax[0].semilogx(nph_list[j], qi2_list[j], "o-")
             # Fit Qi vs power to an exponential
             
 
@@ -379,13 +385,20 @@ def power_sweep(config, VNA):
             ax[0].set_ylabel("Internal Quality Factor ($Q_i$)")
             ax[0].set_title(f"Frequency: {freqs[j]/1e9:.5f} GHz")
             ax[1].semilogx(nph_list[j], qc_list[j], "o-")
-            ax[1].semilogx(nph_list[j], qc2_list[j], "o-")
+            #ax[1].semilogx(nph_list[j], qc2_list[j], "o-")
             plt.show()
 
             # Calculate new averaging based on photon number
             # avg_corr is a fudge factor
+            if i>0: 
+                q_adg = q/q_old
+            else:
+                q_adg = 0.9
+            
+            print(f"Q_adg: {q_adg:.3f}")
+            
             if "avg_corr" in config:
-                new_avgs[j] = np.round(config["avg_corr"] / nph)
+                new_avgs[j] = np.round(config["avg_corr"] / nph/q_adg**2)
                 print(
                     f"Pin {power-config['att']:.1f}, N photons: {nph:.3g}, navg: {int(new_avgs[j])}"
                 )
@@ -402,22 +415,33 @@ def fit_resonator(data, power, fitparams=None, qc=None):
     amps_linear = 10 ** (data["amps"] / 20)
     # f0, Qi, Qe, phi, scale, a0, slope # Qi/Qe in units of 10k 
     if qc is not None:
-        hangerfit = lambda f, f0, qi, phi, scale, slope: fitter.hangerS21func_sloped(f, f0, qi, qc/1e4, phi, scale, slope)
+        hangerfit = lambda f, f0, qi, phi, scale: fitter.hangerS21func(f, f0, qi, qc/1e4, phi, scale)
         
         pars, err = curve_fit(hangerfit, data["freqs"], amps_linear, p0=fitparams)
         freq_center = pars[0]
         q = 1 / (1 / pars[1] / 1e4 + 1 / qc)
         kappa = freq_center / q
+        r2=fitter.get_r2(data["freqs"], amps_linear, hangerfit, pars)
+        err = np.sqrt(np.diag(err))
+        print('f error: ', err[0], 'Qi error: ', err[1], 'phi error: ', err[3], 'scale error: ', err[4])
+        pars = [pars[0], pars[1], qc/1e4, pars[2], pars[3]]
+        fitparams = [pars[0], pars[1], qc/1e4, pars[3], pars[4]]
+        
+        print(f"R2: {r2}")
 
     else:        
         if fitparams is None:
             min_freq = data["freqs"][np.argmin(amps_linear)]
-            fitparams = [min_freq, 100, 100, 0, np.max(amps_linear), 0]
+            fitparams = [min_freq, 100, 100, 0, np.max(amps_linear)]
 
         pars, err, pinit = fitter.fithanger(data["freqs"], amps_linear, fitparams=fitparams)
 
         pars, err, pinit = fitter.fithanger(data["freqs"], amps_linear, fitparams=pars)
-        plot_scan(
+        
+        freq_center = pars[0]
+        q = 1 / (1 / pars[1] + 1 / pars[2]) * 1e4
+        kappa = freq_center / q
+    plot_scan(
             data["freqs"],
             amps_linear,
             data["phases"],
@@ -425,9 +449,6 @@ def fit_resonator(data, power, fitparams=None, qc=None):
             fitparams,
             power,
         )
-        freq_center = pars[0]
-        q = 1 / (1 / pars[1] + 1 / pars[2]) * 1e4
-        kappa = freq_center / q
     
     return freq_center, q, kappa, pars
 
@@ -463,7 +484,7 @@ def get_default_power_sweep_config(custom_config=None):
         "folder": f"power_sweep_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}",
         # Frequency settings
         "freqs": np.array([6]) * 1e9,  # Default center frequency in Hz
-        "span_inc": 9,  # Span as multiple of linewidth
+        "span_inc": 8,  # Span as multiple of linewidth
         "kappa_start": 30000,  # Initial linewidth estimate in Hz
         # Power sweep settings
         "nvals": 18,  # Number of power points
@@ -477,6 +498,8 @@ def get_default_power_sweep_config(custom_config=None):
         "averages": 1,  # Number of averages
         "att": 60,  # Attenuation in dB
         "type": "lin",
+        "freq_0": 6e9,
+        "db_slope":2.2,
         # Analysis settings
         "avg_corr": 2e5,  # Correction factor for averaging
     }
@@ -579,6 +602,7 @@ def do_vna_scan_segments(
         # Segment 0: Lower frequency range
         npoints = cfg["npoints1"]+cfg["npoints2"]+cfg["npoints1"]
         time_expected = 1 / cfg["bandwidth"] * npoints*cfg["averages"]
+        print(f"expected time: {time_expected / 60} min")
         t = 1 / cfg["bandwidth"]/6
         tstart = datetime.datetime.now()    
         VNA.define_segment(
@@ -631,7 +655,7 @@ def do_vna_scan_segments(
         [amps, phases] = VNA.get_traces(trace_name)[0]
         tfinish = datetime.datetime.now()
         elapsed_time = (tfinish - tstart).total_seconds()
-        print(f"Time elapsed: {elapsed_time / 60} min, expected time: {time_expected / 60} min")
+        print(f"Time elapsed: {elapsed_time / 60} min")
         
         # Create data dictionary with timestamp
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -692,8 +716,8 @@ def get_homophase(config):
     fr = config["freq_center"]
     n = np.arange(N) - N / 2 + 1 / 2
     flist=fr + R * df / (2 * w) * np.tan(n / (N - 1) * at)
-    flist_lin = -np.arange(3,1,-1)*df/N+config["freq_center"]-config["span"]/2
-    flist_linp = np.arange(1,3)*df/N+config["freq_center"]+config["span"]/2
+    flist_lin = -np.arange(3,1,-1)*df/N*2+config["freq_center"]-config["span"]/2
+    flist_linp = np.arange(1,3)*df/N*2+config["freq_center"]+config["span"]/2
     flist = np.concatenate([flist_lin, flist, flist_linp])
     return flist
 
