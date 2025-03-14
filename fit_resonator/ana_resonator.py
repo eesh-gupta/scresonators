@@ -30,7 +30,8 @@ from scipy.interpolate import interp1d
 import meas_analysis.handy as hy
 import scresonators.fit_resonator.fit as scfit
 import scresonators.fit_resonator.resonator as scres
-#import pyCircFit_v3 as cf
+
+# import pyCircFit_v3 as cf
 
 # Define a consistent color palette for plots
 COLORS = ["#4053d3", "#b51d14", "#ddb310", "#658b38", "#7e1e9c", "#75bbfd", "#cacaca"]
@@ -182,6 +183,12 @@ class ResonatorData:
 
         # Reformat data for scres package
         if meas_type == "vna":
+            data["phases"] = np.unwrap(data["phases"])
+            data["phases"] = ResonatorData.check_phase(data["phases"])
+            data["freqs"] = data["fpts"]
+            data["amps"] = data["mags"]
+            data["phases"] = data["phases"] - slope * data["freqs"]
+        elif meas_type == "vna_old":
             data["phases"] = np.unwrap(data["phases"][0])
             data["phases"] = ResonatorData.check_phase(data["phases"])
             data["freqs"] = data["fpts"][0]
@@ -229,6 +236,7 @@ class ResonatorData:
     @staticmethod
     def combine_data(
         data1: Dict[str, np.ndarray],
+        attrs: Dict[str, Any],
         data2: Dict[str, np.ndarray],
         fix_freq: bool = True,
         meas_type: str = "soc",
@@ -276,7 +284,10 @@ class ResonatorData:
 
         # Copy VNA power if applicable
         if meas_type == "vna":
-            data["vna_power"] = data1["vna_power"]
+            if "vna_power" in data1:
+                data["vna_power"] = data1["vna_power"]
+            else:
+                data["vna_power"] = attrs["vna_power"]
 
         return data
 
@@ -348,13 +359,13 @@ class ResonatorData:
             # Load and combine second file
             file2 = fname.replace(ends[0], ends[1])
             data2, _ = ResonatorData.grab_data(path, file2, meas_type, slope)
-            data = ResonatorData.combine_data(data1, data2, fix_freq, meas_type)
+            data = ResonatorData.combine_data(data1, attrs, data2, fix_freq, meas_type)
 
         if nfiles > 2:
             # Load and combine third file
             file3 = fname.replace(ends[0], ends[2])
             data3, _ = ResonatorData.grab_data(path, file3, meas_type, slope)
-            data = ResonatorData.combine_data(data, data3, fix_freq, meas_type)
+            data = ResonatorData.combine_data(data, attrs, data3, fix_freq, meas_type)
 
         return data, attrs
 
@@ -757,21 +768,22 @@ class ResonatorAnalyzer:
                         if fitphase:
                             data = ResonatorData.fit_phase(data)
                     except Exception:
-                        # traceback.print_exc()
+                        traceback.print_exc()
                         continue
 
                     # Skip low power measurements
                     if meas_type == "vna":
-                        if data["vna_power"][0] < min_power:
+                        if attrs["vna_power"] < min_power:
                             continue
+                        power.append(attrs["vna_power"])
+                    elif meas_type == "vna_old":
                         power.append(data["vna_power"][0])
-                        print(power[-1])
                     else:
                         if attrs["gain"] < min_power:
                             continue
                         power.append(np.log10(attrs["gain"]) * 20 - 30)
-                        print(power[-1])
 
+                    print(power[-1])
                     try:
                         # Fit resonator
                         output = ResonatorFitter.fit_resonator(
@@ -849,6 +861,7 @@ class ResonatorPlotter:
     def plot_power(
         res_params: List[Dict[str, np.ndarray]],
         cfg: Dict[str, Any],
+        ind: int,
         base_path: str,
         use_pitch: bool = True,
     ) -> None:
@@ -928,8 +941,8 @@ class ResonatorPlotter:
         fig2.tight_layout()
 
         try:
-            fig2.savefig(base_path + cfg["res_name"] + "_Qcfreq_pow.png", dpi=300)
-            fig.savefig(base_path + cfg["res_name"] + "_Qi_pow.png", dpi=300)
+            fig2.savefig(base_path + cfg["meas"][ind] + "_Qcfreq_pow.png", dpi=300)
+            fig.savefig(base_path + cfg["meas"][ind] + "_Qi_pow.png", dpi=300)
         except Exception as e:
             print(f"Error in plotting: {e}")
 

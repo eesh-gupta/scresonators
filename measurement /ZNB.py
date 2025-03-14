@@ -431,6 +431,10 @@ class ZNB20(SocketInstrument):
     #########################################################
     def delete_segments(self):  
         self.write("SEGM:DEL:ALL")
+
+    def count_segments(self):  
+        nseg = self.query("SEGM:COUN?")
+        return nseg
         
     def define_segment(
         self,

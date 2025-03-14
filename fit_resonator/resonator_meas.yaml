@@ -443,38 +443,102 @@ silicon3b:
   - 7.2
   - 7.5
   - 7.9
-silicon4a:
+silicon4b:
   atten: -50
   dir:
-  - - power_sweep_20250302_193605/
+  - - power_sweep_20250302_1936056/
+  - - power_sweep_20250306_091739/
   flip: true
   max_power: 5
   meas:
-  - sil4a_vna
+  - sil4b1
+  - sil4b2
   meas_type:
-  - vna
+  - vna_old
+  - vna_old
+  min_power: -150
+  nfiles:
+  - 1
+  - 1
+  slope:
+  - 0
+  - 0
+  pitch:
+  - 10
+  - 12
+  - 14
+  - 16
+  - 4
+  - 6
+  - 8
+  pth: 
+  - 250227-ResSil4B/
+  - 250227-ResSil4B/
+  target_freq:
+  - 6.08
+  - 6.4
+  - 6.76
+  - 7.09
+  - 7.28
+  - 7.64
+  - 8.13 
+silicon4a2:
+  atten: -50
+  dir:
+  - - power_sweep_20250308_202738/old
+  flip: true
+  max_power: 5
+  meas:
+  - sil4a3
+  meas_type:
+  - vna_old
   min_power: -150
   nfiles:
   - 1
   slope:
   - 0
   pitch:
-  - 10
-  - 12
+  - 12 
   - 14
   - 2
   - 16
+  pth: 
+  - 250227-ResSil4A/
+  target_freq:
+  - 6.4
+  - 6.76
+  - 7.06
+  - 7.09 
+silicon4a:
+  atten: -50
+  dir:
+  - - power_sweep_20250307_174853/
+  - - power_sweep_20250308_202738/
+  flip: true
+  max_power: 5
+  meas:
+  - sil4a1
+  - sil4a2
+  meas_type:
+  - vna
+  - vna
+  min_power: -150
+  nfiles:
+  - 1
+  - 1
+  slope:
+  - 0
+  - 0
+  pitch:
+  - 10
   - 4
   - 6
   - 8
   pth: 
-  - 250227-ResSil4X/
+  - 250227-ResSil4Y/
+  - 250227-ResSil4A/
   target_freq:
   - 6.08
-  - 6.4
-  - 6.76
-  - 7.06
-  - 7.09
   - 7.28
   - 7.64
   - 8.13 
