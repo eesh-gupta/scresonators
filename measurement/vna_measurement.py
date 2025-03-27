@@ -11,6 +11,7 @@ from scipy.optimize import curve_fit
 import scipy.constants as cs
 from scresonators.fit_resonator import ana_tls
 from scresonators.fit_resonator.ana_resonator import ResonatorFitter
+from scresonators.fit_resonator.ana_resonator import ResonatorData
 import scresonators.fit_resonator.pyCircFit_v3 as cf
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple, NamedTuple
@@ -659,6 +660,7 @@ def power_sweep_v2(config, VNA):
 
             # Perform alternative fitting
             try:
+                data = ResonatorData.fit_phase(data)
                 output = ResonatorFitter.fit_resonator(
                     data, fname, output_path, plot=True, fix_freq=False
                 )
