@@ -27,7 +27,7 @@ import scipy.constants as cs
 import seaborn as sns
 from scipy.interpolate import interp1d
 
-import meas_analysis.handy as hy
+import handy as hy
 import scresonators.fit_resonator.fit as scfit
 import scresonators.fit_resonator.resonator as scres
 

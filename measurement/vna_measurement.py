@@ -75,121 +75,6 @@ class PowerSweepResult:
     q_adjustment_factors: List[float]  # Q adjustment factors for each resonator
     keep_measuring: List[bool]  # Whether to continue measuring each resonator
 
-
-def do_vna_scan(VNA, file_name, expt_path, cfg, spar="s21", att=0, plot=True):
-    """
-    Perform a VNA scan and save the data to a file.
-
-    Parameters:
-    -----------
-    VNA : ZNB object
-        The VNA instrument object
-    file_name : str
-        Name for saving the data
-    expt_path : str
-        Path for saving the data
-    cfg : dict
-        Configuration dictionary with measurement parameters:
-        - freq_center: Center frequency in MHz
-        - span: Frequency span in MHz
-        - npoints: Number of frequency points
-        - power: VNA output power in dBm
-        - bandwidth: Measurement bandwidth in Hz
-        - averages: Number of averages
-    spar : str
-        Scattering parameter (e.g., 'S21')
-    att : float, optional
-        Attenuation value in dB, default is 0
-    plot : bool, optional
-        Whether to plot the data, default is True
-
-    Returns:
-    --------
-    dict
-        Dictionary containing the measurement data
-    """
-    try:
-        # Calculate frequency range
-        freq_center = cfg["freq_center"]
-        freq_span = cfg["span"]
-        freq_start = freq_center - 0.5 * freq_span
-        freq_stop = freq_center + 0.5 * freq_span
-
-        # Generate frequency sweep points
-        freq_sweep = np.linspace(freq_start, freq_stop, cfg["npoints"])
-
-        # Get power setting
-        power = cfg["power"]
-
-        # Prepare trace and scattering parameter
-        trace_name = ("trace1",)
-        scattering_parameter = (spar,)
-
-        # Configure VNA
-        VNA.initialize_one_tone_spectroscopy(trace_name, scattering_parameter)
-        VNA.set_startfrequency(freq_start)
-        VNA.set_stopfrequency(freq_stop)
-        VNA.set_points(cfg["npoints"])
-        VNA.set_power(power)
-        VNA.set_measBW(cfg["bandwidth"])
-        VNA.set_sweeps(cfg["averages"])
-        VNA.set_averages(cfg["averages"])
-        VNA.set_averagestatus(status="on")
-
-        # Calculate actual power at device
-        power_at_device = power - att
-
-        # Perform measurement
-        VNA.measure()
-
-        # Get measurement data
-        [amps, phases] = VNA.get_traces(trace_name)[0]
-
-        # Create data dictionary with timestamp
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        data = {
-            "series": timestamp,
-            "amps": amps,
-            "phases": phases,
-            "freqs": freq_sweep,
-            "vna_power": power,
-            "power_at_device": power_at_device,
-            "bandwidth": cfg["bandwidth"],
-            "averages": cfg["averages"],
-            "npoints": cfg["npoints"],
-        }
-        tfinish = datetime.datetime.now()
-        # print(f"Time elapsed: {(tfinish-tstart)/60} min, expected time: {time_expected/60} min")
-        # Save data to file using native SlabFile methods
-        file_path = os.path.join(expt_path, file_name)
-        with SlabFile(file_path, "w") as f:
-            # Save arrays using add_data
-            f.add_data(f, "fpts", freq_sweep)
-            f.add_data(f, "mags", amps)
-            f.add_data(f, "phases", phases)
-
-            # Save scalar values as a dictionary
-            metadata = {
-                "vna_power": power,
-                "power_at_device": power_at_device,
-                "averages": cfg["averages"],
-                "bandwidth": cfg["bandwidth"],
-                "npoints": cfg["npoints"],
-                "timestamp": timestamp,
-            }
-            f.save_dict(metadata)
-
-        # Plot data if requested
-        if plot:
-            plot_all(data, filepath=expt_path)
-
-        return data
-
-    except Exception as e:
-        print(f"Error in do_vna_scan: {str(e)}")
-        raise
-
-
 def plot_scan(freq, amps, phase, pars=None, pinit=None, power=None, slope=None):
     """
     Plot the scan data with amplitude, phase, and IQ plots.
@@ -260,118 +145,6 @@ def plot_scan(freq, amps, phase, pars=None, pinit=None, power=None, slope=None):
     ax[2].plot(amps * np.cos(phase_sub), amps * np.sin(phase_sub), "k.-")
     fig.tight_layout()
     # plt.show()
-
-
-def _perform_initial_scan(VNA, expt_path, result, freq_idx, power, att, fname):
-    """
-    Perform an initial scan to find the resonance frequency and linewidth.
-
-    Parameters:
-    -----------
-    VNA : ZNB object
-        The VNA instrument object
-    expt_path : str
-        Path for saving data
-    result : PowerSweepResult
-        Current result object
-    freq_idx : int
-        Index of the frequency being measured
-    power : float
-        Power level in dBm
-    att : float
-        Attenuation value
-    fname : str
-        Base filename
-
-    Returns:
-    --------
-    ResonatorMeasurement
-        Measurement result for the initial scan
-    """
-    # Configure VNA scan with wider span
-    vna_config = {
-        "freq_center": float(result.current_frequencies[freq_idx]),
-        "span": float(result.spans[freq_idx]) * 1.3,
-        "npoints": 800,
-        "power": power,
-        "bandwidth": 10 * result.config["bandwidth"],
-        "averages": 1,
-    }
-
-    # Perform VNA scan
-    file_name = f"res_{fname}_single.h5"
-    data = do_vna_scan(
-        VNA, file_name, expt_path, vna_config, "S21", att=att, plot=False
-    )
-
-    # Fit resonator to find center frequency and kappa
-    min_freq = result.current_frequencies[freq_idx]  # Initial guess
-    freq_center, q_total, kappa, fit_params = fit_resonator(data, power, plot=True)
-
-    # Calculate quality factors
-    q_internal = fit_params[1] * 1e4
-    q_coupling = fit_params[2] * 1e4
-
-    # Calculate photon number
-    pin = (
-        power
-        - result.config["att"]
-        - result.config["db_slope"] * (freq_center / 1e9 - result.config["freq_0"])
-    )
-    photon_number = n(pin, freq_center, q_total, q_coupling)
-
-    # Create and return measurement object
-    return ResonatorMeasurement(
-        frequency=freq_center,
-        power=power,
-        power_at_device=power - att,
-        q_total=q_total,
-        q_internal=q_internal,
-        q_coupling=q_coupling,
-        kappa=kappa,
-        photon_number=photon_number,
-        averages=1,
-        fit_parameters=fit_params,
-        raw_data=data,
-    )
-
-
-def _perform_vna_scan(VNA, file_name, expt_path, vna_config, config, att):
-    """
-    Perform a VNA scan based on the scan type specified in the config.
-
-    Parameters:
-    -----------
-    VNA : ZNB object
-        The VNA instrument object
-    file_name : str
-        Name for saving the data
-    expt_path : str
-        Path for saving data
-    vna_config : dict
-        VNA configuration dictionary
-    config : dict
-        Main configuration dictionary
-    att : float
-        Attenuation value
-
-    Returns:
-    --------
-    dict
-        Dictionary containing the measurement data
-    """
-    if config["type"] == "lin":
-        return do_vna_scan(
-            VNA, file_name, expt_path, vna_config, "S21", att=att, plot=False
-        )
-    elif config["type"] == "single":
-        return do_vna_scan_single_point(
-            VNA, file_name, expt_path, vna_config, "S21", plot=False
-        )
-    else:
-        return do_vna_scan_segments(
-            VNA, file_name, expt_path, vna_config, spar="s21", plot=False
-        )
 
 
 def _determine_scan_parameters(config, result, freq_idx, power_idx, q_total):
@@ -558,7 +331,7 @@ def power_sweep_v2(config, VNA):
             if power_idx == 0:
                 # Perform initial scan to find resonance frequency and linewidth
                 measurement = _perform_initial_scan(
-                    VNA, expt_path, result, freq_idx, power, att, fname
+                    VNA, expt_path, result, freq_idx, power, att, fname, config["spar"]
                 )
 
                 # Update frequency and span based on measurement
@@ -594,6 +367,7 @@ def power_sweep_v2(config, VNA):
                 "power": power,
                 "bandwidth": config["bandwidth"],
                 "averages": int(curr_avg),
+                "spar": config["spar"]
             }
 
             # Perform the VNA scan
@@ -958,6 +732,7 @@ def get_default_power_sweep_config(custom_config=None):
         "averages": 1,  # Number of averages
         "att": 60,  # Attenuation in dB
         "type": "lin",
+        "spar":'s21',
         "freq_0": 6,
         "db_slope": 4,
         # Analysis settings
@@ -978,8 +753,267 @@ def get_default_power_sweep_config(custom_config=None):
     return default_config
 
 
+def get_homophase(config):
+    """
+    Calculate the list of frequencies that gives you equal phase spacing
+    Parameters:
+    config (dict): A dictionary containing the following keys:
+        - "npoints" (int): Number of points in the frequency list.
+        - "span" (float): Frequency span.
+        - "kappa" (float): linewidth
+        - "kappa_inc" (float): expected linewidth fudge factor (fix me).
+        - "center_freq" (float): Center frequency.
+    Returns:
+    numpy.ndarray: An array containing the calculated frequency list.
+    """
+    nlin = 2
+
+    N = config["npoints"] - nlin * 2
+    df = config["span"]
+    w = df / config["kappa"] * config["kappa_inc"]
+    at = np.arctan(2 * w / (1 - w**2)) + np.pi
+    R = w / np.tan(at / 2)
+    fr = config["freq_center"]
+    n = np.arange(N) - N / 2 + 1 / 2
+    flist = fr + R * df / (2 * w) * np.tan(n / (N - 1) * at)
+    flist_lin = (
+        -np.arange(nlin, 0, -1) * df / N * 3
+        + config["freq_center"]
+        - config["span"] / 2
+    )
+    flist_linp = (
+        np.arange(1, nlin + 1) * df / N * 3 + config["freq_center"] + config["span"] / 2
+    )
+    flist = np.concatenate([flist_lin, flist, flist_linp])
+    return flist
+
+
+def _perform_vna_scan(VNA, file_name, expt_path, vna_config, config, att):
+    """
+    Perform a VNA scan based on the scan type specified in the config.
+
+    Parameters:
+    -----------
+    VNA : ZNB object
+        The VNA instrument object
+    file_name : str
+        Name for saving the data
+    expt_path : str
+        Path for saving data
+    vna_config : dict
+        VNA configuration dictionary
+    config : dict
+        Main configuration dictionary
+    att : float
+        Attenuation value
+
+    Returns:
+    --------
+    dict
+        Dictionary containing the measurement data
+    """
+    if config["type"] == "lin":
+        return do_vna_scan(
+            VNA, file_name, expt_path, vna_config, att=att, plot=False
+        )
+    elif config["type"] == "single":
+        return do_vna_scan_single_point(
+            VNA, file_name, expt_path, vna_config, plot=False
+        )
+    else:
+        return do_vna_scan_segments(
+            VNA, file_name, expt_path, vna_config, plot=False
+        )
+
+def _perform_initial_scan(VNA, expt_path, result, freq_idx, power, att, fname, spar="S21"):
+    """
+    Perform an initial scan to find the resonance frequency and linewidth.
+
+    Parameters:
+    -----------
+    VNA : ZNB object
+        The VNA instrument object
+    expt_path : str
+        Path for saving data
+    result : PowerSweepResult
+        Current result object
+    freq_idx : int
+        Index of the frequency being measured
+    power : float
+        Power level in dBm
+    att : float
+        Attenuation value
+    fname : str
+        Base filename
+
+    Returns:
+    --------
+    ResonatorMeasurement
+        Measurement result for the initial scan
+    """
+    # Configure VNA scan with wider span
+    vna_config = {
+        "freq_center": float(result.current_frequencies[freq_idx]),
+        "span": float(result.spans[freq_idx]) * 1.3,
+        "npoints": 800,
+        "power": power,
+        "bandwidth": 10 * result.config["bandwidth"],
+        "averages": 1,
+    }
+
+    # Perform VNA scan
+    file_name = f"res_{fname}_single.h5"
+    data = do_vna_scan(
+        VNA, file_name, expt_path, vna_config, att=att, plot=False
+    )
+
+    # Fit resonator to find center frequency and kappa
+    min_freq = result.current_frequencies[freq_idx]  # Initial guess
+    freq_center, q_total, kappa, fit_params = fit_resonator(data, power, plot=True)
+
+    # Calculate quality factors
+    q_internal = fit_params[1] * 1e4
+    q_coupling = fit_params[2] * 1e4
+
+    # Calculate photon number
+    pin = (
+        power
+        - result.config["att"]
+        - result.config["db_slope"] * (freq_center / 1e9 - result.config["freq_0"])
+    )
+    photon_number = n(pin, freq_center, q_total, q_coupling)
+
+    # Create and return measurement object
+    return ResonatorMeasurement(
+        frequency=freq_center,
+        power=power,
+        power_at_device=power - att,
+        q_total=q_total,
+        q_internal=q_internal,
+        q_coupling=q_coupling,
+        kappa=kappa,
+        photon_number=photon_number,
+        averages=1,
+        fit_parameters=fit_params,
+        raw_data=data,
+    )
+
+
+def do_vna_scan(VNA, file_name, expt_path, cfg, att=0, plot=True):
+    """
+    Perform a VNA scan and save the data to a file.
+
+    Parameters:
+    -----------
+    VNA : ZNB object
+        The VNA instrument object
+    file_name : str
+        Name for saving the data
+    expt_path : str
+        Path for saving the data
+    cfg : dict
+        Configuration dictionary with measurement parameters:
+        - freq_center: Center frequency in MHz
+        - span: Frequency span in MHz
+        - npoints: Number of frequency points
+        - power: VNA output power in dBm
+        - bandwidth: Measurement bandwidth in Hz
+        - averages: Number of averages
+        - spar: Scattering parameter (e.g., 'S21')
+    att : float, optional
+        Attenuation value in dB, default is 0
+    plot : bool, optional
+        Whether to plot the data, default is True
+
+    Returns:
+    --------
+    dict
+        Dictionary containing the measurement data
+    """
+    try:
+        # Calculate frequency range
+        freq_center = cfg["freq_center"]
+        freq_span = cfg["span"]
+        freq_start = freq_center - 0.5 * freq_span
+        freq_stop = freq_center + 0.5 * freq_span
+
+        # Generate frequency sweep points
+        freq_sweep = np.linspace(freq_start, freq_stop, cfg["npoints"])
+
+        # Get power setting
+        power = cfg["power"]
+
+        # Prepare trace and scattering parameter
+        trace_name = ("trace1",)
+        scattering_parameter = (cfg['spar'],)
+
+        # Configure VNA
+        VNA.initialize_one_tone_spectroscopy(trace_name, scattering_parameter)
+        VNA.set_startfrequency(freq_start)
+        VNA.set_stopfrequency(freq_stop)
+        VNA.set_points(cfg["npoints"])
+        VNA.set_power(power)
+        VNA.set_measBW(cfg["bandwidth"])
+        VNA.set_sweeps(cfg["averages"])
+        VNA.set_averages(cfg["averages"])
+        VNA.set_averagestatus(status="on")
+
+        # Calculate actual power at device
+        power_at_device = power - att
+
+        # Perform measurement
+        VNA.measure()
+
+        # Get measurement data
+        [amps, phases] = VNA.get_traces(trace_name)[0]
+
+        # Create data dictionary with timestamp
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        data = {
+            "series": timestamp,
+            "amps": amps,
+            "phases": phases,
+            "freqs": freq_sweep,
+            "vna_power": power,
+            "power_at_device": power_at_device,
+            "bandwidth": cfg["bandwidth"],
+            "averages": cfg["averages"],
+            "npoints": cfg["npoints"],
+        }
+        tfinish = datetime.datetime.now()
+        # print(f"Time elapsed: {(tfinish-tstart)/60} min, expected time: {time_expected/60} min")
+        # Save data to file using native SlabFile methods
+        file_path = os.path.join(expt_path, file_name)
+        with SlabFile(file_path, "w") as f:
+            # Save arrays using add_data
+            f.add_data(f, "fpts", freq_sweep)
+            f.add_data(f, "mags", amps)
+            f.add_data(f, "phases", phases)
+
+            # Save scalar values as a dictionary
+            metadata = {
+                "vna_power": power,
+                "power_at_device": power_at_device,
+                "averages": cfg["averages"],
+                "bandwidth": cfg["bandwidth"],
+                "npoints": cfg["npoints"],
+                "timestamp": timestamp,
+            }
+            f.save_dict(metadata)
+
+        # Plot data if requested
+        if plot:
+            plot_all(data, filepath=expt_path)
+
+        return data
+
+    except Exception as e:
+        print(f"Error in do_vna_scan: {str(e)}")
+        raise
+
+
 def do_vna_scan_segments(
-    VNA, file_name, expt_path, cfg, spar="s21", warm_att=0, cold_att=0, plot=True
+    VNA, file_name, expt_path, cfg, warm_att=0, cold_att=0, plot=True
 ):
     """
     Perform a VNA scan with segmented frequency ranges and save the data to a file.
@@ -1026,7 +1060,7 @@ def do_vna_scan_segments(
         power = cfg["power"]
 
         # Prepare trace and scattering parameter
-        scattering_parameter = (spar,)
+        scattering_parameter = (cfg["spar"],)
         trace_name = ("trace1",)
 
         # Define segment width ratio (center segment width / total span)
@@ -1163,44 +1197,8 @@ def do_vna_scan_segments(
         print(f"Error in do_vna_scan_segments: {str(e)}")
         raise
 
-
-def get_homophase(config):
-    """
-    Calculate the list of frequencies that gives you equal phase spacing
-    Parameters:
-    config (dict): A dictionary containing the following keys:
-        - "npoints" (int): Number of points in the frequency list.
-        - "span" (float): Frequency span.
-        - "kappa" (float): linewidth
-        - "kappa_inc" (float): expected linewidth fudge factor (fix me).
-        - "center_freq" (float): Center frequency.
-    Returns:
-    numpy.ndarray: An array containing the calculated frequency list.
-    """
-    nlin = 2
-
-    N = config["npoints"] - nlin * 2
-    df = config["span"]
-    w = df / config["kappa"] * config["kappa_inc"]
-    at = np.arctan(2 * w / (1 - w**2)) + np.pi
-    R = w / np.tan(at / 2)
-    fr = config["freq_center"]
-    n = np.arange(N) - N / 2 + 1 / 2
-    flist = fr + R * df / (2 * w) * np.tan(n / (N - 1) * at)
-    flist_lin = (
-        -np.arange(nlin, 0, -1) * df / N * 3
-        + config["freq_center"]
-        - config["span"] / 2
-    )
-    flist_linp = (
-        np.arange(1, nlin + 1) * df / N * 3 + config["freq_center"] + config["span"] / 2
-    )
-    flist = np.concatenate([flist_lin, flist, flist_linp])
-    return flist
-
-
 def do_vna_scan_single_point(
-    VNA, file_name, expt_path, cfg, spar="s21", warm_att=0, cold_att=0, plot=True
+    VNA, file_name, expt_path, cfg,warm_att=0, cold_att=0, plot=True
 ):
     """
     Perform a VNA scan with segmented frequency ranges and save the data to a file.
@@ -1249,7 +1247,7 @@ def do_vna_scan_single_point(
         freq_list = get_homophase(cfg)
 
         # Prepare trace and scattering parameter
-        scattering_parameter = (spar,)
+        scattering_parameter = (cfg['spar'],)
         trace_name = ("trace1",)
 
         # Initialize VNA
