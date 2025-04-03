@@ -75,6 +75,7 @@ class PowerSweepResult:
     q_adjustment_factors: List[float]  # Q adjustment factors for each resonator
     keep_measuring: List[bool]  # Whether to continue measuring each resonator
 
+
 def plot_scan(freq, amps, phase, pars=None, pinit=None, power=None, slope=None):
     """
     Plot the scan data with amplitude, phase, and IQ plots.
@@ -169,6 +170,7 @@ def _determine_scan_parameters(config, result, freq_idx, power_idx, q_total):
     tuple
         (npoints, span) - Number of points and span for the scan
     """
+    # Use more points for higher powers
     if power_idx < 6:
         npoints = 2 * config["npoints"]
         span = result.spans[freq_idx] * 1.25
@@ -287,7 +289,6 @@ def power_sweep_v2(config, VNA):
     min_avg = 12
 
     # Initialize result storage
-    measurements = {}
     keep_going = [True] * len(freqs0)
     q_adj = 0.9 * np.ones(len(freqs0))
 
@@ -313,6 +314,7 @@ def power_sweep_v2(config, VNA):
 
         # Process each power point for this frequency
         for power_idx, power in enumerate(powers):
+            # Skip if the quality factor is no longer changing
             if not result.keep_measuring[freq_idx]:
                 continue
 
@@ -367,7 +369,7 @@ def power_sweep_v2(config, VNA):
                 "power": power,
                 "bandwidth": config["bandwidth"],
                 "averages": int(curr_avg),
-                "spar": config["spar"]
+                "spar": config["spar"],
             }
 
             # Perform the VNA scan
@@ -392,62 +394,51 @@ def power_sweep_v2(config, VNA):
             ]  # Use previous frequency as initial guess
 
             # Determine fit parameters based on power index
-            if power_idx < 8:
-                fitparams = [
-                    min_freq,
-                    prev_fit_params[1],
-                    prev_fit_params[2],
-                    prev_fit_params[3],
-                    np.max(10 ** (data["amps"] / 20)),
-                ]
-                freq_center, q_total, kappa, fit_params = fit_resonator(
-                    data, power, fitparams
-                )
-                q_coupling = fit_params[2] * 1e4
-            else:
-                # For higher power indices, use mean of previous coupling Q values
-                qc_values = [
-                    result.measurements[freq_idx][i].q_coupling
-                    for i in range(3, 7)
-                    if i < power_idx
-                ]
-                qc_best = np.mean(qc_values) if qc_values else prev_fit_params[2] * 1e4
+            # if power_idx < 8:
+            #     fitparams = [
+            #         min_freq,
+            #         prev_fit_params[1],
+            #         prev_fit_params[2],
+            #         prev_fit_params[3],
+            #         np.max(10 ** (data["amps"] / 20)),
+            #     ]
+            #     freq_center, q_total, kappa, fit_params = fit_resonator(
+            #         data, power, fitparams
+            #     )
+            #     q_coupling = fit_params[2] * 1e4
+            # else:
+            #     # For higher power indices, use mean of previous coupling Q values
+            #     qc_values = [
+            #         result.measurements[freq_idx][i].q_coupling
+            #         for i in range(3, 7)
+            #         if i < power_idx
+            #     ]
+            #     qc_best = np.mean(qc_values) if qc_values else prev_fit_params[2] * 1e4
 
-                fitparams = [
-                    min_freq,
-                    prev_fit_params[1],
-                    prev_fit_params[3],
-                    np.max(10 ** (data["amps"] / 20)),
-                ]
-                freq_center, q_total, kappa, fit_params = fit_resonator(
-                    data, power, fitparams, qc_best
-                )
-                q_coupling = qc_best
+            #     fitparams = [
+            #         min_freq,
+            #         prev_fit_params[1],
+            #         prev_fit_params[3],
+            #         np.max(10 ** (data["amps"] / 20)),
+            #     ]
+            #     freq_center, q_total, kappa, fit_params = fit_resonator(
+            #         data, power, fitparams, qc_best
+            #     )
+            #     q_coupling = qc_best
 
             # Calculate internal Q
-            q_internal = fit_params[1] * 1e4
+            # q_internal = fit_params[1] * 1e4
 
-            # # Prepare data for alternative fitting method
-            # amps_linear = 10 ** (data["amps"] / 20)
-            # data["x"] = amps_linear * np.cos(-data["phases"]) / np.max(amps_linear)
-            # data["y"] = amps_linear * np.sin(-data["phases"]) / np.max(amps_linear)
-
-            # Perform alternative fitting
-            try:
-                data = ResonatorData.fit_phase(data)
-                output = ResonatorFitter.fit_resonator(
-                    data, fname, output_path, plot=True, fix_freq=False
-                )
-                q_total_alt = output[0][0]
-                q_coupling_alt = output[0][1]
-                freq_alt = output[0][2]
-                q_internal_alt = 1 / (1 / q_total_alt - 1 / q_coupling_alt)
-            except Exception as e:
-                print(f"Alternative fit failed: {str(e)}")
-                q_total_alt = None
-                q_coupling_alt = None
-                freq_alt = None
-                q_internal_alt = None
+            data = ResonatorData.fit_phase(data)
+            output = ResonatorFitter.fit_resonator(
+                data, fname, output_path, plot=True, fix_freq=False
+            )
+            # freq_center, q_total, kappa, fit_params
+            q_total = output[0][0]
+            q_coupling = output[0][1]
+            freq_center = output[0][2]
+            q_internal = 1 / (1 / q_total - 1 / q_coupling)
+            kappa = freq_center / q_total
 
             # Calculate photon number
             pin = (
@@ -465,14 +456,10 @@ def power_sweep_v2(config, VNA):
                 q_total=q_total,
                 q_internal=q_internal,
                 q_coupling=q_coupling,
-                q_total_alt=q_total_alt,
-                q_internal_alt=q_internal_alt,
-                q_coupling_alt=q_coupling_alt,
-                frequency_alt=freq_alt,
                 kappa=kappa,
                 photon_number=photon_number,
                 averages=int(curr_avg),
-                fit_parameters=fit_params,
+                fit_parameters=output,
                 raw_data=data,
             )
 
@@ -732,7 +719,7 @@ def get_default_power_sweep_config(custom_config=None):
         "averages": 1,  # Number of averages
         "att": 60,  # Attenuation in dB
         "type": "lin",
-        "spar":'s21',
+        "spar": "s21",
         "freq_0": 6,
         "db_slope": 4,
         # Analysis settings
@@ -813,19 +800,18 @@ def _perform_vna_scan(VNA, file_name, expt_path, vna_config, config, att):
         Dictionary containing the measurement data
     """
     if config["type"] == "lin":
-        return do_vna_scan(
-            VNA, file_name, expt_path, vna_config, att=att, plot=False
-        )
+        return do_vna_scan(VNA, file_name, expt_path, vna_config, att=att, plot=False)
     elif config["type"] == "single":
         return do_vna_scan_single_point(
             VNA, file_name, expt_path, vna_config, plot=False
         )
     else:
-        return do_vna_scan_segments(
-            VNA, file_name, expt_path, vna_config, plot=False
-        )
+        return do_vna_scan_segments(VNA, file_name, expt_path, vna_config, plot=False)
 
-def _perform_initial_scan(VNA, expt_path, result, freq_idx, power, att, fname, spar="S21"):
+
+def _perform_initial_scan(
+    VNA, expt_path, result, freq_idx, power, att, fname, spar="S21"
+):
     """
     Perform an initial scan to find the resonance frequency and linewidth.
 
@@ -863,9 +849,7 @@ def _perform_initial_scan(VNA, expt_path, result, freq_idx, power, att, fname, s
 
     # Perform VNA scan
     file_name = f"res_{fname}_single.h5"
-    data = do_vna_scan(
-        VNA, file_name, expt_path, vna_config, att=att, plot=False
-    )
+    data = do_vna_scan(VNA, file_name, expt_path, vna_config, att=att, plot=False)
 
     # Fit resonator to find center frequency and kappa
     min_freq = result.current_frequencies[freq_idx]  # Initial guess
@@ -945,7 +929,7 @@ def do_vna_scan(VNA, file_name, expt_path, cfg, att=0, plot=True):
 
         # Prepare trace and scattering parameter
         trace_name = ("trace1",)
-        scattering_parameter = (cfg['spar'],)
+        scattering_parameter = (cfg["spar"],)
 
         # Configure VNA
         VNA.initialize_one_tone_spectroscopy(trace_name, scattering_parameter)
@@ -1197,8 +1181,9 @@ def do_vna_scan_segments(
         print(f"Error in do_vna_scan_segments: {str(e)}")
         raise
 
+
 def do_vna_scan_single_point(
-    VNA, file_name, expt_path, cfg,warm_att=0, cold_att=0, plot=True
+    VNA, file_name, expt_path, cfg, warm_att=0, cold_att=0, plot=True
 ):
     """
     Perform a VNA scan with segmented frequency ranges and save the data to a file.
@@ -1247,7 +1232,7 @@ def do_vna_scan_single_point(
         freq_list = get_homophase(cfg)
 
         # Prepare trace and scattering parameter
-        scattering_parameter = (cfg['spar'],)
+        scattering_parameter = (cfg["spar"],)
         trace_name = ("trace1",)
 
         # Initialize VNA
