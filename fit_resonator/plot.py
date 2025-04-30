@@ -9,8 +9,8 @@ import csv
 import os
 import uncertainties
 
-import scresonators.fit_resonator.fit as fit
-import scresonators.fit_resonator.cavity_functions as ff
+import fit_resonator.fit as fit
+import fit_resonator.cavity_functions as ff
 
 # import fit as fit
 # import cavity_functions as ff

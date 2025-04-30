@@ -9,9 +9,9 @@ import sys
 import os
 import logging
 
-import scresonators.fit_resonator.cavity_functions as ff
-import scresonators.fit_resonator.plot as fp
-import scresonators.fit_resonator.resonator as res
+import fit_resonator.cavity_functions as ff
+import fit_resonator.plot as fp
+import fit_resonator.resonator as res
 
 # import cavity_functions as ff
 # import plot as fp

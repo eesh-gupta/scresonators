@@ -1,4 +1,4 @@
-from scresonators.measurement.datamanagement import SlabFile
+from measurement.datamanagement import SlabFile
 import re
 import json
 import numpy as np

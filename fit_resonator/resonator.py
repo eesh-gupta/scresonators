@@ -6,8 +6,8 @@ import attr
 import os
 import numpy as np
 
-import scresonators.fit_resonator.cavity_functions as ff
-import scresonators.fit_resonator.fit as fit
+import fit_resonator.cavity_functions as ff
+import fit_resonator.fit as fit
 
 
 class FitMethod(object):
