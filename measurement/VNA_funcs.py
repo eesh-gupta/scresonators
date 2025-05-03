@@ -7,7 +7,7 @@ import json
 import datetime
 from time import *
 
-from ZNB import ZNB20
+from scresonators.measurement.ZNB import ZNB20
 
 
 ## ------------------
