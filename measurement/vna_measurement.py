@@ -2,18 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import datetime
-from scresonators.measurement.vna_scan import do_vna_scan, do_vna_scan_single_point, do_vna_scan_segments
 import scresonators.measurement.fitting as fitter
+
 import copy
 from scipy.optimize import curve_fit
-import scipy.constants as cs
 from scresonators.fit_resonator import ana_tls
 from scresonators.fit_resonator.ana_resonator import ResonatorFitter
 from scresonators.fit_resonator.ana_resonator import ResonatorData
 import scresonators.fit_resonator.pyCircFit_v3 as cf
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Tuple, NamedTuple
-from helpers import n, pow_res
+from typing import List, Dict, Any, Optional
+from scresonators.measurement.helpers import n, pow_res
 
 @dataclass
 class ResonatorMeasurement:
@@ -146,13 +145,13 @@ def plot_scan(freq, amps, phase, pars=None, pinit=None, power=None, slope=None):
     # plt.show()
 
 
-def _perform_initial_scan(VNA, expt_path, result, freq_idx, power, att, fname):
+def _perform_initial_scan(hw, expt_path, result, freq_idx, power, att, fname):
     """
     Perform an initial scan to find the resonance frequency and linewidth.
 
     Parameters:
     -----------
-    VNA : ZNB object
+    hw : ZNB object
         The VNA instrument object
     expt_path : str
         Path for saving data
@@ -173,24 +172,25 @@ def _perform_initial_scan(VNA, expt_path, result, freq_idx, power, att, fname):
         Measurement result for the initial scan
     """
     # Configure VNA scan with wider span
-    vna_config = {
+    scan_config = {
         "freq_center": float(result.current_frequencies[freq_idx]),
         "span": float(result.spans[freq_idx]) * 1.3,
         "npoints": 800,
         "power": power,
-        "bandwidth": 10 * result.config["bandwidth"],
+        "bandwidth": 4 * result.config["bandwidth"],
         "averages": 1,
     }
 
     # Perform VNA scan
     file_name = f"res_{fname}_single.h5"
-    if type(VNA) is not dict:
-        data = do_vna_scan(
-            VNA, file_name, expt_path, vna_config, "S21", att=att, plot=False
+    if type(hw) is not dict:
+        import scresonators.measurement.vna_scan as vna_scan
+        data = vna_scan.do_vna_scan(
+            hw, file_name, expt_path, scan_config, "S21", att=att, plot=False
         )
     else:
-        vna_config["phase_inc"]=result.config["phase_inc"]
-        data = do_rfsoc_scan(VNA, file_name, expt_path, vna_config, att=att, plot=False)
+        scan_config["phase_inc"]=result.config["phase_inc"]
+        data = do_rfsoc_scan(hw, file_name, expt_path, scan_config, att=att, plot=False)
 
     # Fit resonator to find center frequency and kappa
     min_freq = result.current_frequencies[freq_idx]  # Initial guess
@@ -224,15 +224,39 @@ def _perform_initial_scan(VNA, expt_path, result, freq_idx, power, att, fname):
     )
 
 
-def do_rfsoc_scan(hw, file_name, expt_path, vna_config, att=0, plot=False):
+def do_rfsoc_scan(hw, file_name, expt_path, scan_config, att=0, plot=False):
     import slab_qick_calib.experiments as meas
     # for now, change gain 
-    gain = 10**(vna_config['power']/20)
-    rspec = meas.ResSpec(hw, qi=0, params={'span':vna_config['span']/1e6,'reps':vna_config['averages'],'gain':gain,'length':1e6/vna_config['bandwidth'], 'center':vna_config['freq_center']/1e6,'expts':vna_config['npoints'], 'final_delay':50}, save=False, display=False)
+    if 'atten_id' in scan_config:
+        from scresonators.measurement import vaunix_da
+        gain=1
+        vaunix_da.set_atten(scan_config['attn_id'], scan_config['attn_channel'], scan_config['power'])
+    else:
+        gain = 10**(scan_config['power']/20)
+    params = {'span':scan_config['span']/1e6,
+              'reps':scan_config['averages'],
+              'gain':gain,
+              'length':1e6/scan_config['bandwidth'],
+              'center':scan_config['freq_center']/1e6,
+              'expts':scan_config['npoints'],
+              'loop':True, 
+              'phase_const':True,
+              'final_delay':50}
+    oth_par = {'span':0.2, 
+               'reps':10,
+               'gain':gain,
+               'length':100,
+               'center':scan_config['freq_center']-3,
+               'expts':10,
+               }
+
+    s = meas.ResSpec(hw, qi=0, params=oth_par, save=False, display=False, analyze=False, progress=False)
+
+    rspec = meas.ResSpec(hw, qi=0, params=params, save=False, display=False)
 
     rspec.data['freqs']=rspec.data['xpts']*1e6
 
-    fix_phase = rspec.data['phases']-vna_config['phase_inc'][0]*rspec.data['xpts']
+    fix_phase = rspec.data['phases']-scan_config['phase_inc']*rspec.data['xpts']
     data = copy.deepcopy(rspec.data)
     data['phases']= np.unwrap(fix_phase)-np.unwrap(fix_phase)[0]
     data['amps']=20*np.log10(data['amps'])
@@ -242,20 +266,20 @@ def do_rfsoc_scan(hw, file_name, expt_path, vna_config, att=0, plot=False):
     
     return data
 
-def _perform_vna_scan(VNA, file_name, expt_path, vna_config, config, att):
+def _perform_scan(hw, file_name, expt_path, scan_config, config, att):
     """
-    Perform a VNA scan based on the scan type specified in the config.
+    Perform a scan based on the scan type specified in the config.
 
     Parameters:
     -----------
-    VNA : ZNB object
+    hw : ZNB object or RFSoC object
         The VNA instrument object
     file_name : str
         Name for saving the data
     expt_path : str
         Path for saving data
-    vna_config : dict
-        VNA configuration dictionary
+    scan_config : dict
+        scan configuration dictionary
     config : dict
         Main configuration dictionary
     att : float
@@ -266,22 +290,26 @@ def _perform_vna_scan(VNA, file_name, expt_path, vna_config, config, att):
     dict
         Dictionary containing the measurement data
     """
-    if config["type"] == "lin":
-        return do_vna_scan(
-            VNA, file_name, expt_path, vna_config, "S21", att=att, plot=False
-        )
-    elif config["type"] == "single":
-        return do_vna_scan_single_point(
-            VNA, file_name, expt_path, vna_config, "S21", plot=False
-        )
-    elif config["type"] == "rfsoc":
-        return do_rfsoc_scan(
-            VNA, file_name, expt_path, vna_config, att=att, plot=False
-        )
+    if not config["type"]== "rfsoc":
+        from scresonators.measurement.vna_scan import do_vna_scan, do_vna_scan_single_point, do_vna_scan_segments
+
+        if config["type"] == "lin":
+            return do_vna_scan(
+                hw, file_name, expt_path, scan_config, "S21", att=att, plot=False
+            )
+        elif config["type"] == "single":
+            return do_vna_scan_single_point(
+                hw, file_name, expt_path, scan_config, "S21", plot=False
+            )
+        else:
+            return do_vna_scan_segments(
+                hw, file_name, expt_path, scan_config, spar="s21", plot=False
+            )
     else:
-        return do_vna_scan_segments(
-            VNA, file_name, expt_path, vna_config, spar="s21", plot=False
+        return do_rfsoc_scan(
+            hw, file_name, expt_path, scan_config, att=att, plot=False
         )
+    
 
 def _determine_scan_parameters(config, result, freq_idx, power_idx, q_total):
     """
@@ -343,11 +371,11 @@ def _should_stop_measuring(result, freq_idx, next_time):
     """
     #print(result.q_adjustment_factors[freq_idx])
     #print(next_time)
-    return (result.q_adjustment_factors[freq_idx] > 1.05 and next_time > 900) or (
-        result.q_adjustment_factors[freq_idx] > 1 and next_time > 1800
-    ) or (result.q_adjustment_factors[freq_idx] > 0.985 and next_time > 2400
-    ) or (result.q_adjustment_factors[freq_idx] > 0.96 and next_time > 3600
-    )
+    return (result.q_adjustment_factors[freq_idx] > 1.05 and next_time > 900 
+    ) or (result.q_adjustment_factors[freq_idx] > 1 and next_time > 1800
+    ) or (result.q_adjustment_factors[freq_idx] > 0.985 and next_time > 2700
+    ) or (result.q_adjustment_factors[freq_idx] > 0.96 and next_time > 3800
+    ) or next_time > 7200
 
 
 def _calculate_next_measurement_time(config, result, freq_idx):
@@ -448,7 +476,6 @@ def power_sweep_v2(config, VNA):
     # Perform power sweep for each frequency
     for freq_idx, freq in enumerate(result.current_frequencies):
         result.measurements[freq_idx] = {}
-
         # Process each power point for this frequency
         for power_idx, power in enumerate(powers):
             if not result.keep_measuring[freq_idx]:
@@ -495,7 +522,7 @@ def power_sweep_v2(config, VNA):
             )
 
             # Configure VNA scan for this power point
-            vna_config = {
+            scan_config = {
                 "freq_center": float(result.current_frequencies[freq_idx]),
                 "span": span,
                 "kappa": result.spans[freq_idx] / config["span_inc"],
@@ -510,13 +537,12 @@ def power_sweep_v2(config, VNA):
             # Perform the VNA scan
             tstart = datetime.datetime.now()
             time_expected = (
-                1 / vna_config["bandwidth"] * npoints * vna_config["averages"]
+                1 / scan_config["bandwidth"] * npoints * scan_config["averages"]
             )
             print(f"Expected time: {time_expected / 60:.2f} min")
 
             file_name = f"res_{fname}_{pow_name}dbm.h5"
-            data = _perform_vna_scan(VNA, file_name, expt_path, vna_config, config, att)
-
+            data = _perform_scan(VNA, file_name, expt_path, scan_config, config, att)
             tfinish = datetime.datetime.now()
             elapsed_time = (tfinish - tstart).total_seconds()
             print(
@@ -564,11 +590,6 @@ def power_sweep_v2(config, VNA):
             # Calculate internal Q
             q_internal = fit_params[1] * 1e4
 
-            # # Prepare data for alternative fitting method
-            # amps_linear = 10 ** (data["amps"] / 20)
-            # data["x"] = amps_linear * np.cos(-data["phases"]) / np.max(amps_linear)
-            # data["y"] = amps_linear * np.sin(-data["phases"]) / np.max(amps_linear)
-
             # Perform alternative fitting
             try:
                 data = ResonatorData.fit_phase(data)
@@ -579,6 +600,7 @@ def power_sweep_v2(config, VNA):
                 q_coupling_alt = output[0][1]
                 freq_alt = output[0][2]
                 q_internal_alt = 1 / (1 / q_total_alt - 1 / q_coupling_alt)
+                print(q_internal_alt)
             except Exception as e:
                 print(f"Alternative fit failed: {str(e)}")
                 q_total_alt = None
@@ -660,6 +682,7 @@ def power_sweep_v2(config, VNA):
 
             # Update span for next measurement
             result.spans[freq_idx] = measurement.kappa * config["span_inc"]
+
 
     return result
 
@@ -740,6 +763,7 @@ def power_sweep_rfsoc(config, hw):
     # Perform power sweep for each frequency
     for freq_idx, freq in enumerate(result.current_frequencies):
         result.measurements[freq_idx] = {}
+        dd=[]
 
         # Process each power point for this frequency
         for power_idx, power in enumerate(powers):
@@ -787,7 +811,7 @@ def power_sweep_rfsoc(config, hw):
             )
 
             # Configure VNA scan for this power point
-            vna_config = {
+            scan_config = {
                 "freq_center": float(result.current_frequencies[freq_idx]),
                 "span": span,
                 "kappa": result.spans[freq_idx] / config["span_inc"],
@@ -803,13 +827,13 @@ def power_sweep_rfsoc(config, hw):
             # Perform the VNA scan
             tstart = datetime.datetime.now()
             time_expected = (
-                1 / vna_config["bandwidth"] * npoints * vna_config["averages"]
+                1 / scan_config["bandwidth"] * npoints * scan_config["averages"]
             )
             print(f"Expected time: {time_expected / 60:.2f} min")
 
             file_name = f"res_{fname}_{pow_name}dbm.h5"
-            data = _perform_vna_scan(hw, file_name, expt_path, vna_config, config, att)
-
+            data = _perform_scan(hw, file_name, expt_path, scan_config, config, att)
+            dd.append(data)
             tfinish = datetime.datetime.now()
             elapsed_time = (tfinish - tstart).total_seconds()
             print(
@@ -857,11 +881,6 @@ def power_sweep_rfsoc(config, hw):
             # Calculate internal Q
             q_internal = fit_params[1] * 1e4
 
-            # # Prepare data for alternative fitting method
-            # amps_linear = 10 ** (data["amps"] / 20)
-            # data["x"] = amps_linear * np.cos(-data["phases"]) / np.max(amps_linear)
-            # data["y"] = amps_linear * np.sin(-data["phases"]) / np.max(amps_linear)
-
             # Perform alternative fitting
             try:
                 data = ResonatorData.fit_phase(data)
@@ -870,14 +889,18 @@ def power_sweep_rfsoc(config, hw):
                 )
                 q_total_alt = output[0][0]
                 q_coupling_alt = output[0][1]
+                phase = output[0][3]
+                Qc_comp = q_coupling_alt / np.exp(1j * phase)
+                q_internal_alt = (q_total_alt**-1 - np.real(Qc_comp**-1)) ** -1
                 freq_alt = output[0][2]
-                q_internal_alt = 1 / (1 / q_total_alt - 1 / q_coupling_alt)
+                q_internal_alt2 = 1 / (1 / q_total_alt - 1 / q_coupling_alt)
             except Exception as e:
                 print(f"Alternative fit failed: {str(e)}")
                 q_total_alt = None
                 q_coupling_alt = None
                 freq_alt = None
                 q_internal_alt = None
+
 
             # Calculate photon number
             pin = (
@@ -928,6 +951,7 @@ def power_sweep_rfsoc(config, hw):
                     * (measurement.q_coupling / measurement.q_total) ** 2
                     * 1e-11
                 )
+                print(measurement.q_coupling / measurement.q_total)**2
                 print(f"Tau proportionality: {tau_prop}")
 
                 result.averaging_factors[freq_idx] = np.round(
@@ -953,6 +977,12 @@ def power_sweep_rfsoc(config, hw):
 
             # Update span for next measurement
             result.spans[freq_idx] = measurement.kappa * config["span_inc"]
+
+        plt.figure()
+        for i, d in enumerate(dd): 
+            plt.semilogy(d['xpts'], d['amps']/np.max(d['amps']), label=f'{i}')
+        plt.legend()
+        plt.show()
 
     return result
 
