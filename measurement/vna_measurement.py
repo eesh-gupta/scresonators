@@ -9,11 +9,10 @@ from scipy.optimize import curve_fit
 from scresonators.fit_resonator import ana_tls
 from scresonators.fit_resonator.ana_resonator import ResonatorFitter
 from scresonators.fit_resonator.ana_resonator import ResonatorData
-import scresonators.fit_resonator.pyCircFit_v3 as cf
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from scresonators.measurement.helpers import n, pow_res
-
+from scresonators.measurement.helpers import n, pow_res, config_figs
+import seaborn as sns
 @dataclass
 class ResonatorMeasurement:
     """
@@ -145,7 +144,7 @@ def plot_scan(freq, amps, phase, pars=None, pinit=None, power=None, slope=None):
     # plt.show()
 
 
-def _perform_initial_scan(hw, expt_path, result, freq_idx, power, att, fname):
+def _perform_initial_scan(hw, expt_path, result, freq_idx, power, att, fname, config):
     """
     Perform an initial scan to find the resonance frequency and linewidth.
 
@@ -177,7 +176,7 @@ def _perform_initial_scan(hw, expt_path, result, freq_idx, power, att, fname):
         "span": float(result.spans[freq_idx]) * 1.3,
         "npoints": 800,
         "power": power,
-        "bandwidth": 4 * result.config["bandwidth"],
+        "bandwidth": result.config["bandwidth"],
         "averages": 1,
     }
 
@@ -190,7 +189,7 @@ def _perform_initial_scan(hw, expt_path, result, freq_idx, power, att, fname):
         )
     else:
         scan_config["phase_inc"]=result.config["phase_inc"]
-        data = do_rfsoc_scan(hw, file_name, expt_path, scan_config, att=att, plot=False)
+        data = do_rfsoc_scan(hw, file_name, expt_path, scan_config,config =config, att=att, plot=False)
 
     # Fit resonator to find center frequency and kappa
     min_freq = result.current_frequencies[freq_idx]  # Initial guess
@@ -224,29 +223,34 @@ def _perform_initial_scan(hw, expt_path, result, freq_idx, power, att, fname):
     )
 
 
-def do_rfsoc_scan(hw, file_name, expt_path, scan_config, att=0, plot=False):
+def do_rfsoc_scan(hw, file_name, expt_path, scan_config, config, att=0, plot=False):
     import slab_qick_calib.experiments as meas
     # for now, change gain 
-    if 'atten_id' in scan_config:
+    if 'attn_id' in config:
         from scresonators.measurement import vaunix_da
         gain=1
-        vaunix_da.set_atten(scan_config['attn_id'], scan_config['attn_channel'], scan_config['power'])
+        vaunix_da.set_atten(config['attn_id'], config['attn_channel'], -scan_config['power'])
+        import time
+        time.sleep(0.1)
     else:
         gain = 10**(scan_config['power']/20)
+    if 'loop' not in config:
+        config['loop'] = False
+        config['phase_const']=False
     params = {'span':scan_config['span']/1e6,
               'reps':scan_config['averages'],
               'gain':gain,
               'length':1e6/scan_config['bandwidth'],
               'center':scan_config['freq_center']/1e6,
               'expts':scan_config['npoints'],
-              'loop':True, 
-              'phase_const':True,
+              'loop':config['loop'], 
+              'phase_const':config['phase_const'],
               'final_delay':50}
     oth_par = {'span':0.2, 
                'reps':10,
                'gain':gain,
-               'length':100,
-               'center':scan_config['freq_center']-3,
+               'length':1000,
+               'center':scan_config['freq_center']/1e6-3,
                'expts':10,
                }
 
@@ -307,7 +311,7 @@ def _perform_scan(hw, file_name, expt_path, scan_config, config, att):
             )
     else:
         return do_rfsoc_scan(
-            hw, file_name, expt_path, scan_config, att=att, plot=False
+            hw, file_name, expt_path, scan_config, config=config, att=att, plot=False
         )
     
 
@@ -333,17 +337,17 @@ def _determine_scan_parameters(config, result, freq_idx, power_idx, q_total):
     tuple
         (npoints, span) - Number of points and span for the scan
     """
-    if power_idx < 6:
-        npoints = 2 * config["npoints"]
+    if power_idx < 5:
+        npoints = int(np.ceil(1.6 * config["npoints"]))
         span = result.spans[freq_idx] * 1.25
     elif power_idx > 0 and "next_time" in globals():
-        if globals()["next_time"] > 2400:
-            npoints = int(np.ceil(2 * config["npoints"]))
-            config["span_inc"] = 0.85 * config["span_inc"]
-            print("Reducing points due to long scan")
-        else:
-            npoints = config["npoints"]
-            span = result.spans[freq_idx]
+        # if globals()["next_time"] > 2400:
+        #     npoints = int(np.ceil(1.6 * config["npoints"]))
+        #     config["span_inc"] = 0.85 * config["span_inc"]
+        #     print("Reducing points due to long scan")
+        # else:
+        npoints = config["npoints"]
+        span = result.spans[freq_idx]
     else:
         npoints = config["npoints"]
         span = result.spans[freq_idx]
@@ -499,7 +503,7 @@ def power_sweep_v2(config, hw):
             if power_idx == 0:
                 # Perform initial scan to find resonance frequency and linewidth
                 measurement = _perform_initial_scan(
-                    hw, expt_path, result, freq_idx, power, att, fname
+                    hw, expt_path, result, freq_idx, power, att, fname, config
                 )
 
                 # Update frequency and span based on measurement
@@ -547,7 +551,7 @@ def power_sweep_v2(config, hw):
 
             file_name = f"res_{fname}_{pow_name}dbm.h5"
             data = _perform_scan(hw, file_name, expt_path, scan_config, config, att)
-            dd.append(data)
+            
             tfinish = datetime.datetime.now()
             elapsed_time = (tfinish - tstart).total_seconds()
             print(
@@ -614,7 +618,7 @@ def power_sweep_v2(config, hw):
                 q_coupling_alt = None
                 freq_alt = None
                 q_internal_alt = None
-
+            dd.append(data)
 
             # Calculate photon number
             pin = (
@@ -662,16 +666,16 @@ def power_sweep_v2(config, hw):
                 )
                 tau_prop = (
                     10 ** (-pin / 10)
-                    * (measurement.q_coupling / measurement.q_total) ** 5
-                    * 1e-12
+                    * (measurement.q_coupling / measurement.q_total) ** 2
+                    * 1e-11
                 )
-                print((measurement.q_coupling / measurement.q_total)**5)
+                print((measurement.q_coupling / measurement.q_total)**2)
                 print(f"Tau proportionality: {tau_prop}")
 
                 result.averaging_factors[freq_idx] = np.round(
                     config["avg_corr"]
                     * tau_prop
-                    / result.q_adjustment_factors[freq_idx] ** 2
+                    / result.q_adjustment_factors[freq_idx] ** 5
                 )
                 print(
                     f"Pin {power - config['att']:.1f}, N photons: {measurement.photon_number:.3g}, navg: {int(result.averaging_factors[freq_idx])}"
@@ -692,11 +696,19 @@ def power_sweep_v2(config, hw):
             # Update span for next measurement
             result.spans[freq_idx] = measurement.kappa * config["span_inc"]
 
-        plt.figure()
+        sns.set_palette('crest', len(dd))
+        fig, ax = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
         for i, d in enumerate(dd): 
-            plt.semilogy(d['xpts'], d['amps']/np.max(d['amps']), label=f'{i}')
-        plt.legend()
+            f = (d['xpts']-np.mean(d['xpts']))*1e3
+            ax[0].plot(f, d['amps']-np.max(d['amps']), label=f'{i}')
+            ax[1].plot(f, d['phases']-np.mean(d['phases']), label=f'{i}')
+        #ax[0].legend()
+        ax[0].set_ylabel('Amplitude (dB)')
+        ax[1].set_ylabel('Phase (rad)')
+        ax[1].set_xlabel('Frequency Offset (kHz)')
+        ax[0].set_title(f"Frequency: {result.current_frequencies[freq_idx]/1e9:.5f} GHz")
         plt.show()
+        fig.savefig(os.path.join(expt_path, f"Data_{freq_idx}.png"))
 
     return result
 
@@ -713,6 +725,8 @@ def _plot_qi_vs_photon(measurements, freq_idx, expt_path):
     expt_path : str
         Path to save the plot
     """
+
+    config_figs()
     if freq_idx not in measurements:
         return
 
@@ -747,8 +761,8 @@ def _plot_qi_vs_photon(measurements, freq_idx, expt_path):
             q_fitn = lambda n, Qtls0, Qoth, nc, beta: ana_tls.Qtotn(
                 n, 0.04, min_freq, Qtls0, Qoth, nc, beta
             )
-            p = [np.min(qi_values), np.max(qi_values), 3, 0.4]
-            p, err = curve_fit(q_fitn, photon_numbers, qi_values, p0=p)
+            p = [np.min(qi_values), np.max(qi_alt_values), 3, 0.4]
+            p, err = curve_fit(q_fitn, photon_numbers, qi_alt_values, p0=p)
             ax[0].plot(
                 photon_numbers,
                 q_fitn(np.array(photon_numbers), *p),
@@ -931,5 +945,3 @@ def get_default_power_sweep_config(custom_config=None):
             default_config[key] = value
 
     return default_config
-
-

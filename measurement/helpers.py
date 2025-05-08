@@ -1,5 +1,7 @@
 import numpy as np
 import scipy.constants as cs
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 def n(p, f, q, qc):
     return pow_res(p) * q**2 / qc / (cs.h * f**2 * np.pi)
@@ -41,3 +43,13 @@ def get_homophase(config):
     )
     flist = np.concatenate([flist_lin, flist, flist_linp])
     return flist
+
+def config_figs():
+
+    # Set seaborn color palette
+    colors = ["#0869c8", "#b51d14", '#ddb310', '#658b38', '#7e1e9c', '#75bbfd', '#cacaca']
+    sns.set_palette(sns.color_palette(colors))
+
+    # Figure parameters
+    plt.rcParams['figure.figsize'] = [8, 4]
+    plt.rcParams.update({'font.size': 13})
