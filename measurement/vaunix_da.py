@@ -46,9 +46,19 @@ def get_vaunix_atten(channel):
     minAttenuation = int(vnx.fnLDA_GetMinAttenuation(devid) / 4)
     maxAttenuation = int(vnx.fnLDA_GetMaxAttenuation(devid) / 4)
     numChannels = vnx.fnLDA_GetNumChannels(devid)
-    vnx.fnLDA_SetChannel(devid, channel)
+    print('Device ID: ', devid)
+    print('Serial Number: ', vnx.fnLDA_GetSerialNumber(devid))
+    print('Min Attenuation: ', minAttenuation)
+    print('Max Attenuation: ', maxAttenuation)
+    print('Number of Channels: ', numChannels)
+
     return devid
 
 def set_atten(devid, channel, attenuation):
+    vnx.fnLDA_SetChannel(devid, channel)
     vnx.fnLDA_SetAttenuationHR(devid, int(attenuation * 20))
     print('Current device set to channel ', str(channel), ' attenuation ', str(attenuation))
+
+def get_atten(devid):
+    data = vnx.fnLDA_GetAttenuationHR(devid)
+    return (data/20.0)

@@ -176,7 +176,7 @@ def _perform_initial_scan(hw, expt_path, result, freq_idx, power, att, fname, co
         "span": float(result.spans[freq_idx]) * 1.3,
         "npoints": 800,
         "power": power,
-        "bandwidth": result.config["bandwidth"],
+        "bandwidth": 100, #result.config["bandwidth"],
         "averages": 1,
     }
 
@@ -188,7 +188,11 @@ def _perform_initial_scan(hw, expt_path, result, freq_idx, power, att, fname, co
             hw, file_name, expt_path, scan_config, "S21", att=att, plot=False
         )
     else:
+        config=copy.deepcopy(config)
         scan_config["phase_inc"]=result.config["phase_inc"]
+        config["phase_const"]=False
+        scan_config['kappa']=np.nan
+
         data = do_rfsoc_scan(hw, file_name, expt_path, scan_config,config =config, att=att, plot=False)
 
     # Fit resonator to find center frequency and kappa
@@ -231,16 +235,17 @@ def do_rfsoc_scan(hw, file_name, expt_path, scan_config, config, att=0, plot=Fal
         gain=1
         vaunix_da.set_atten(config['attn_id'], config['attn_channel'], -scan_config['power'])
         import time
-        time.sleep(0.1)
+        
     else:
         gain = 10**(scan_config['power']/20)
+    time.sleep(0.1)
     if 'loop' not in config:
         config['loop'] = False
         config['phase_const']=False
     params = {'span':scan_config['span']/1e6,
               'reps':scan_config['averages'],
               'gain':gain,
-              'length':1e6/scan_config['bandwidth'],
+              'length':int(1e6/scan_config['bandwidth']),
               'center':scan_config['freq_center']/1e6,
               'expts':scan_config['npoints'],
               'loop':config['loop'], 
@@ -253,10 +258,19 @@ def do_rfsoc_scan(hw, file_name, expt_path, scan_config, config, att=0, plot=Fal
                'center':scan_config['freq_center']/1e6-3,
                'expts':10,
                }
+    #s = meas.ResSpec(hw, qi=0, params=oth_par, save=False, display=False, analyze=False, progress=False)
 
-    s = meas.ResSpec(hw, qi=0, params=oth_par, save=False, display=False, analyze=False, progress=False)
+    if config['loop']: 
+        exp = meas.ResSpec2D
+        params['expts_count']=params['reps']
+        params['reps']=1
+        params['kappa']=scan_config['kappa'],
+        if config['pin']>-88:
+            params['length']=np.min((params['length'],10000))
+    else:
+        exp = meas.ResSpec
 
-    rspec = meas.ResSpec(hw, qi=0, params=params, save=False, display=False)
+    rspec = exp(hw, qi=0, params=params, save=False, display=False, analyze=False)
 
     rspec.data['freqs']=rspec.data['xpts']*1e6
 
@@ -499,9 +513,13 @@ def power_sweep_v2(config, hw):
             pow_name = f"{power:.0f}"
             fname = f"{result.frequencies[freq_idx]:1.0f}"
 
+            
+            
             # For first power point, do an initial scan with wider span
             if power_idx == 0:
                 # Perform initial scan to find resonance frequency and linewidth
+                pin = (power - config["att"])
+                config['pin'] = pin
                 measurement = _perform_initial_scan(
                     hw, expt_path, result, freq_idx, power, att, fname, config
                 )
@@ -540,9 +558,18 @@ def power_sweep_v2(config, hw):
                 "power": power,
                 "bandwidth": config["bandwidth"],
                 "averages": int(curr_avg),
+                "kappa": measurement.kappa/1e6,
             }
+            pin = (
+                    power
+                    - config["att"]
+                    - config["db_slope"]
+                    * (measurement.frequency / 1e9 - config["freq_0"])
+                )
+            config['pin'] = pin
 
             # Perform the VNA scan
+            
             tstart = datetime.datetime.now()
             time_expected = (
                 1 / scan_config["bandwidth"] * npoints * scan_config["averages"]
@@ -573,7 +600,7 @@ def power_sweep_v2(config, hw):
                     np.max(10 ** (data["amps"] / 20)),
                 ]
                 freq_center, q_total, kappa, fit_params = fit_resonator(
-                    data, power, fitparams
+                    data, power, fitparams, plot=True
                 )
                 q_coupling = fit_params[2] * 1e4
             else:
@@ -658,12 +685,7 @@ def power_sweep_v2(config, hw):
                 result.q_adjustment_factors[freq_idx] = measurement.q_total / prev_q
 
             if "avg_corr" in config:
-                pin = (
-                    power
-                    - config["att"]
-                    - config["db_slope"]
-                    * (measurement.frequency / 1e9 - config["freq_0"])
-                )
+                
                 tau_prop = (
                     10 ** (-pin / 10)
                     * (measurement.q_coupling / measurement.q_total) ** 2
@@ -696,19 +718,7 @@ def power_sweep_v2(config, hw):
             # Update span for next measurement
             result.spans[freq_idx] = measurement.kappa * config["span_inc"]
 
-        sns.set_palette('crest', len(dd))
-        fig, ax = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
-        for i, d in enumerate(dd): 
-            f = (d['xpts']-np.mean(d['xpts']))*1e3
-            ax[0].plot(f, d['amps']-np.max(d['amps']), label=f'{i}')
-            ax[1].plot(f, d['phases']-np.mean(d['phases']), label=f'{i}')
-        #ax[0].legend()
-        ax[0].set_ylabel('Amplitude (dB)')
-        ax[1].set_ylabel('Phase (rad)')
-        ax[1].set_xlabel('Frequency Offset (kHz)')
-        ax[0].set_title(f"Frequency: {result.current_frequencies[freq_idx]/1e9:.5f} GHz")
-        plt.show()
-        fig.savefig(os.path.join(expt_path, f"Data_{freq_idx}.png"))
+        
 
     return result
 
@@ -814,6 +824,24 @@ def _plot_qi_vs_photon(measurements, freq_idx, expt_path):
     fig.savefig(os.path.join(expt_path, f"Qi_vs_power_{freq_idx}.png"))
     plt.close(fig)
 
+    npl = len(measurements[freq_idx])
+    sns.set_palette('crest', npl)
+    fig, ax = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
+    for i, d in enumerate(np.arange(npl)): 
+        d=measurements[freq_idx][i].raw_data
+        f = (d['xpts']-np.mean(d['xpts']))*1e3
+        ax[0].plot(f, d['amps']-np.max(d['amps']), label=f'{i}')
+        ax[1].plot(f, d['phases']-np.mean(d['phases']), label=f'{i}')
+    #ax[0].legend()
+    ax[0].set_ylabel('Amplitude (dB)')
+    ax[1].set_ylabel('Phase (rad)')
+    ax[1].set_xlabel('Frequency Offset (kHz)')
+    ax[0].set_title(f"Frequency: {measurements[freq_idx][power_indices[0]].frequency:.5f} GHz")
+    plt.show()
+    fig.savefig(os.path.join(expt_path, f"Data_{freq_idx}.png"))
+    plt.close(fig)
+
+
 
 # For backward compatibility
 def power_sweep(config, VNA):
@@ -889,6 +917,7 @@ def fit_resonator(data, power, fitparams=None, qc=None, plot=False):
             fitparams,
             power,
         )
+    plt.show()
 
     return freq_center, q, kappa, pars
 
