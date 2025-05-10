@@ -274,7 +274,8 @@ def do_rfsoc_scan(hw, file_name, expt_path, scan_config, config, att=0, plot=Fal
 
     rspec.data['freqs']=rspec.data['xpts']*1e6
 
-    fix_phase = rspec.data['phases']-scan_config['phase_inc']*rspec.data['xpts']
+    #fix_phase = rspec.data['phases']-scan_config['phase_inc']*rspec.data['xpts']
+    fix_phase = rspec.data['phases'] 
     data = copy.deepcopy(rspec.data)
     data['phases']= np.unwrap(fix_phase)-np.unwrap(fix_phase)[0]
     data['amps']=20*np.log10(data['amps'])
@@ -574,7 +575,7 @@ def power_sweep_v2(config, hw):
             time_expected = (
                 1 / scan_config["bandwidth"] * npoints * scan_config["averages"]
             )
-            print(f"Expected time: {time_expected / 60:.2f} min")
+            #print(f"Expected time: {time_expected / 60:.2f} min")
 
             file_name = f"res_{fname}_{pow_name}dbm.h5"
             data = _perform_scan(hw, file_name, expt_path, scan_config, config, att)
@@ -600,7 +601,7 @@ def power_sweep_v2(config, hw):
                     np.max(10 ** (data["amps"] / 20)),
                 ]
                 freq_center, q_total, kappa, fit_params = fit_resonator(
-                    data, power, fitparams, plot=True
+                    data, power, fitparams, plot=False
                 )
                 q_coupling = fit_params[2] * 1e4
             else:
@@ -691,8 +692,8 @@ def power_sweep_v2(config, hw):
                     * (measurement.q_coupling / measurement.q_total) ** 2
                     * 1e-11
                 )
-                print((measurement.q_coupling / measurement.q_total)**2)
-                print(f"Tau proportionality: {tau_prop}")
+                #print((measurement.q_coupling / measurement.q_total)**2)
+                print(f"Tau proportionality: {tau_prop:.3f}")
 
                 result.averaging_factors[freq_idx] = np.round(
                     config["avg_corr"]
@@ -837,7 +838,6 @@ def _plot_qi_vs_photon(measurements, freq_idx, expt_path):
     ax[1].set_ylabel('Phase (rad)')
     ax[1].set_xlabel('Frequency Offset (kHz)')
     ax[0].set_title(f"Frequency: {measurements[freq_idx][power_indices[0]].frequency:.5f} GHz")
-    plt.show()
     fig.savefig(os.path.join(expt_path, f"Data_{freq_idx}.png"))
     plt.close(fig)
 
