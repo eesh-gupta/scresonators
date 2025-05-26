@@ -1,0 +1,25 @@
+siliconta6_res1c2:
+  dir:
+  - power_sweep_20250524_171954/
+  meas:
+  - silta6_res1c2
+  pitch:
+  - 10
+  - 12
+  - 14
+  - 2
+  - 16
+  - 4
+  - 6
+  - 8
+  pth: 
+  - 250518-ResSilTa1_cooldown2/
+  target_freq:
+  - 6.08
+  - 6.4
+  - 6.76
+  - 7.06
+  - 7.09
+  - 7.28
+  - 7.64
+  - 8.13 
