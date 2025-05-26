@@ -101,7 +101,7 @@ def fit_qi(
     for i in range(len(res_params)):
 
         # photon numbers
-        nn = res_params[i]["nphotons"][j, :]
+        nn = res_params[i]["nphotons"][:]
         freq = res_params[i]["freqs"][j, 0]
         nn_min.append(np.min(nn))
         nn_max.append(np.max(nn))
