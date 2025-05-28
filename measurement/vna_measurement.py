@@ -901,7 +901,7 @@ def get_default_power_sweep_config(custom_config=None):
 
 
 def _perform_fits(
-    power_idx, freq_idx, result, data, power, prev_fit_params, expt_path, fname
+    power_idx, freq_idx, result, data, power, prev_fit_params, expt_path, fname, att
 ):
     if power_idx < 8:
         fitparams = [
@@ -974,3 +974,27 @@ def _perform_fits(
         print(f"Alternative fit failed: {str(e)}")
         q_total = q_coupling = freq = q_internal = None
         phase_err = qi_err = qc_err = f_err = q_err = None
+
+    # Create measurement object
+    measurement = ResonatorMeasurement(
+        frequency_amp=freq_center,
+        power=power,
+        power_at_device=power - att,
+        q_total_amp=q_total_amp,
+        q_internal_amp=fit_params[1] * 1e4,
+        q_coupling_amp=q_coupling_amp,
+        q_total=q_total,
+        q_internal=q_internal,
+        q_coupling=q_coupling,
+        frequency=freq,
+        q_internal=qi_err,
+        q_coupling_err=qc_err,
+        frequency_err=f_err,
+        phase_err=phase_err,
+        kappa=kappa,
+        photon_number=n(pin, freq_center, q_total_amp, q_coupling_amp),
+        averages=int(max(result.averaging_factors[freq_idx], 1)),
+        fit_parameters=fit_params,
+        raw_data=data,
+    )
+    return measurement
