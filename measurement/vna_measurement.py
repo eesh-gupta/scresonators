@@ -901,7 +901,16 @@ def get_default_power_sweep_config(custom_config=None):
 
 
 def _perform_fits(
-    power_idx, freq_idx, result, data, power, prev_fit_params, expt_path, fname, att
+    power_idx,
+    freq_idx,
+    result,
+    data,
+    power,
+    prev_fit_params,
+    expt_path,
+    fname,
+    att,
+    pin,
 ):
     if power_idx < 8:
         fitparams = [
