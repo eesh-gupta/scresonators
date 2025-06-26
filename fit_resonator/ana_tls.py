@@ -271,10 +271,10 @@ def fit_qi2(
         res_data = res_data.sort_values(by="photon_number")
         # photon numbers
         nn = res_data["photon_number"].values
-        freq = res_data["frequency_alt_Hz"].iloc[0]
-        qc.append(np.nanmedian(res_data["q_coupling_alt"].values))
+        freq = res_data["frequency_Hz"].iloc[0]
+        qc.append(np.nanmedian(res_data["q_coupling"].values))
         qc_err.append(np.nanmedian(res_data["q_coupling_err"].values))
-        freqs.append(np.nanmedian(res_data["frequency_alt_Hz"].values))
+        freqs.append(np.nanmedian(res_data["frequency_Hz"].values))
         nn_min.append(np.min(nn))
         nn_max.append(np.max(nn))
         pitch.append(res_data["pitch"].iloc[0] if "pitch" in res_data.columns else "")
@@ -295,7 +295,7 @@ def fit_qi2(
         mask = photon_mask(nn, min_photon_vec, max_photon_vec, i)
 
         nn_fit = nn[mask]
-        qi_fit = res_data["q_internal_alt"].values[mask]
+        qi_fit = res_data["q_internal"].values[mask]
         qi_err = res_data["q_internal_err"].values[mask]
 
         # print(nn_fit)
@@ -466,7 +466,7 @@ def plot_res_pars(params_list, labs, base_pth, name=None):
         ax[4].errorbar(
             params["pitch"], params["beta"], yerr=params["beta_err"], fmt="."
         )
-        ax[5].plot(params["freqs"] / params["target_freq"] / 1e9, ".")
+        ax[5].plot(params["pitch"], params["freqs"] / params["target_freq"] / 1e9, ".")
         # ax[5].plot((params['pitch'],(params['pitch']), params['qi0']/params['qc'],params['qi_hi']/params['qc']), '.-', label=l, color=colors[i])
         # ax[5].plot(params['pitch'], params['qi_hi']/params['qc'], '.', label=l, color=colors[i])
 
@@ -478,7 +478,7 @@ def plot_res_pars(params_list, labs, base_pth, name=None):
             ax[2].set_ylim(0, np.nanmax(params["qother"] / 1e6) * 1.2)
         # ax[3].set_ylim(0,np.nanmax(qtls0/1e6)*1.1)
         i += 1
-
+    ax[0].set_ylim([0, 2])
     ax[0].legend()
     ax[0].set_ylabel("$Q_c \; (10^6)$")
 
