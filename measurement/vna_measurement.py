@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import datetime
-
+import csv
 import copy
 from scipy.optimize import curve_fit
 from scresonators.fit_resonator import ana_tls
@@ -38,7 +38,8 @@ class ResonatorMeasurement:
     frequency: Optional[float] = None
 
     # Error parameters for alternative fit (if available)
-    q_internal: Optional[float] = None
+    q_total_err: Optional[float] = None
+    q_internal_err: Optional[float] = None
     q_coupling_err: Optional[float] = None
     frequency_err: Optional[float] = None
     phase_err: Optional[float] = None
@@ -468,106 +469,16 @@ def power_sweep_v2(config, hw):
                 np.argmin(data["amps"])
             ]
 
-            # Determine fit parameters based on power index
-            if power_idx < 8:
-                fitparams = [
-                    result.current_frequencies[freq_idx],
-                    prev_fit_params[1],
-                    prev_fit_params[2],
-                    prev_fit_params[3],
-                    np.max(10 ** (data["amps"] / 20)),
-                ]
-                freq_center, q_total_amp, kappa, fit_params = fit_resonator(
-                    data, power, fitparams, plot=False
-                )
-                q_coupling_amp = fit_params[2] * 1e4
-            else:
-                # For higher power indices, use mean of previous coupling Q values
-                qc_values = [
-                    result.measurements[freq_idx][i].q_coupling_amp
-                    for i in range(4, 8)
-                    if i < power_idx
-                ]
-                qc_best = np.mean(qc_values) if qc_values else prev_fit_params[2] * 1e4
-
-                fitparams = [
-                    result.current_frequencies[freq_idx],
-                    prev_fit_params[1],
-                    prev_fit_params[3],
-                    np.max(10 ** (data["amps"] / 20)),
-                ]
-                freq_center, q_total_amp, kappa, fit_params = fit_resonator(
-                    data, power, fitparams, qc_best
-                )
-                q_coupling_amp = qc_best
-
-            # Perform alternative fitting
-            try:
-                data = ResonatorData.fit_phase(data)
-                if power_idx < 100:
-                    output = ResonatorFitter.fit_resonator(
-                        data, fname, expt_path, plot=True, fix_freq=False
-                    )
-                else:
-                    qc_values = [
-                        result.measurements[freq_idx][i].q_coupling
-                        for i in range(4, 7)
-                        if i < power_idx
-                    ]
-                    qc_best = np.mean(np.array(qc_values))
-                    output = ResonatorFitter.fit_resonator(
-                        data,
-                        fname,
-                        expt_path,
-                        plot=True,
-                        fix_freq=False,
-                        fit_Qc=False,
-                        Qc_fix=qc_best,
-                    )
-
-                q_total, q_coupling, freq, phase = output[0][:4]
-                phase_err, qi_err, qc_err, f_err = (
-                    output[1][4],
-                    output[1][1],
-                    output[1][2],
-                    output[1][5],
-                )
-
-                Qc_comp = q_coupling / np.exp(1j * phase)
-                q_internal = (q_total**-1 - np.real(Qc_comp**-1)) ** -1
-            except Exception as e:
-                print(f"Alternative fit failed: {str(e)}")
-                q_total = q_coupling = freq = q_internal = None
-                phase_err = qi_err = qc_err = f_err = None
-
-            # Calculate photon number
-            pin = (
-                power
-                - config["att"]
-                - config["db_slope"] * (freq_center / 1e9 - config["freq_0"])
-            )
-
-            # Create measurement object
-            measurement = ResonatorMeasurement(
-                frequency_amp=freq_center,
-                power=power,
-                power_at_device=power - config.get("att", 0),
-                q_total_amp=q_total_amp,
-                q_internal_amp=fit_params[1] * 1e4,
-                q_coupling_amp=q_coupling_amp,
-                q_total=q_total,
-                q_internal=q_internal,
-                q_coupling=q_coupling,
-                frequency=freq,
-                q_internal=qi_err,
-                q_coupling_err=qc_err,
-                frequency_err=f_err,
-                phase_err=phase_err,
-                kappa=kappa,
-                photon_number=n(pin, freq_center, q_total_amp, q_coupling_amp),
-                averages=int(max(result.averaging_factors[freq_idx], 1)),
-                fit_parameters=fit_params,
-                raw_data=data,
+            measurement = _perform_fits(
+                power_idx,
+                freq_idx,
+                result,
+                data,
+                power,
+                prev_fit_params,
+                expt_path,
+                fname,
+                config,
             )
 
             # Store the measurement
@@ -585,7 +496,7 @@ def power_sweep_v2(config, hw):
 
             if "avg_corr" in config:
                 tau_prop = (
-                    10 ** (-pin / 10)
+                    10 ** (-measurement.power_at_device / 10)
                     * (measurement.q_coupling_amp / measurement.q_total_amp) ** 2
                     * 1e-11
                 )
@@ -594,7 +505,7 @@ def power_sweep_v2(config, hw):
                 result.averaging_factors[freq_idx] = np.round(
                     config["avg_corr"]
                     * tau_prop
-                    / result.q_adjustment_factors[freq_idx] ** 5
+                    / result.q_adjustment_factors[freq_idx] ** 2
                 )
                 print(
                     f"Pin {power - config['att']:.1f}, N photons: {measurement.photon_number:.3g}, navg: {int(result.averaging_factors[freq_idx])}"
@@ -784,7 +695,13 @@ def _save_fit_to_csv(measurement, freq_idx, power_idx, expt_path):
         # Add error parameters to header if available
         if measurement.q_internal_err is not None:
             header.extend(
-                ["q_internal_err", "q_coupling_err", "frequency_err", "phase_err"]
+                [
+                    "q_internal_err",
+                    "q_total_err",
+                    "q_coupling_err",
+                    "frequency_err",
+                    "phase_err",
+                ]
             )
 
     # Create data row
@@ -818,6 +735,7 @@ def _save_fit_to_csv(measurement, freq_idx, power_idx, expt_path):
             data_row.extend(
                 [
                     measurement.q_internal_err,
+                    measurement.q_total_err,
                     measurement.q_coupling_err,
                     measurement.frequency_err,
                     measurement.phase_err,
@@ -900,17 +818,32 @@ def get_default_power_sweep_config(custom_config=None):
     return default_config
 
 
+def write_hp_csv(results, config):
+    qhp_list = []
+    for i in range(len(results.measurements)):
+        q_int = [
+            results.measurements[i][j].q_internal
+            for j in range(len(results.measurements[i]))
+        ]
+        qhp = np.max(q_int)
+        qhp_list.append(np.round(qhp))
+
+    fname = os.path.join(config["base_path"], "qhp.csv")
+    with open(fname, mode="a", newline="") as file:
+        writer = csv.writer(file)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        writer.writerow([now] + qhp_list)
+
+
+def new_hp_csv(path):
+    fname = os.path.join(path, "qhp.csv")
+    with open(fname, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Timestamp", "10", "12", "14", "2", "16", "4", "6", "8"])
+
+
 def _perform_fits(
-    power_idx,
-    freq_idx,
-    result,
-    data,
-    power,
-    prev_fit_params,
-    expt_path,
-    fname,
-    att,
-    pin,
+    power_idx, freq_idx, result, data, power, prev_fit_params, expt_path, fname, config
 ):
     if power_idx < 8:
         fitparams = [
@@ -947,7 +880,7 @@ def _perform_fits(
     # Perform alternative fitting
     try:
         data = ResonatorData.fit_phase(data)
-        if power_idx < 100:
+        if power_idx < 8:
             output = ResonatorFitter.fit_resonator(
                 data, fname, expt_path, plot=True, fix_freq=False
             )
@@ -984,11 +917,23 @@ def _perform_fits(
         q_total = q_coupling = freq = q_internal = None
         phase_err = qi_err = qc_err = f_err = q_err = None
 
+        # Calculate photon number
+    pin = (
+        power
+        - config["att"]
+        - config["db_slope"] * (freq_center / 1e9 - config["freq_0"])
+    )
+
+    if config["type"] == "linear":
+        min_avg = 10
+    else:
+        min_avg = 100
+
     # Create measurement object
     measurement = ResonatorMeasurement(
         frequency_amp=freq_center,
         power=power,
-        power_at_device=power - att,
+        power_at_device=pin,
         q_total_amp=q_total_amp,
         q_internal_amp=fit_params[1] * 1e4,
         q_coupling_amp=q_coupling_amp,
@@ -996,13 +941,14 @@ def _perform_fits(
         q_internal=q_internal,
         q_coupling=q_coupling,
         frequency=freq,
-        q_internal=qi_err,
+        q_internal_err=qi_err,
+        q_total_err=q_err,
         q_coupling_err=qc_err,
         frequency_err=f_err,
         phase_err=phase_err,
         kappa=kappa,
         photon_number=n(pin, freq_center, q_total_amp, q_coupling_amp),
-        averages=int(max(result.averaging_factors[freq_idx], 1)),
+        averages=int(max(result.averaging_factors[freq_idx], min_avg)),
         fit_parameters=fit_params,
         raw_data=data,
     )
