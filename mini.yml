@@ -115,3 +115,56 @@ siliconta7_res_sq:
   - 7.2
   - 7.5
   - 7.9 
+siliconta8_slab:
+  dir:
+  - power_sweep_comb_atten
+  - power_sweep_20250729_125835
+  meas:
+  - silta8_slab
+  pitch:
+  - 6
+  - 10
+  - 16
+  - 35
+  - 4
+  #- 3
+  - 30
+  pth: 
+  - 20250728-ResSilTa-Aggron-Slab/
+  target_freq:
+  - 6.028 
+  - 6.378
+  - 6.789
+  - 7.505 
+  - 7.588 
+  #- 8.049
+  - 7.913
+  # - 5.9529
+  # - 6.332
+  # - 6.7587
+  # - 7.371
+  # - 7.49
+siliconta8_jpa:
+  dir:
+  - power_sweep_20250730_171750
+  - power_sweep_20250729_161941
+  meas:
+  - silta8_jpa
+  pitch:
+  - 6
+  - 10
+  - 16
+  - 35
+  - 4
+  - 30
+  - 3
+  pth: 
+  - 20250728-ResSilTa-Aggron-JPA/
+  target_freq:
+  - 6.028 
+  - 6.378
+  - 6.789
+  - 7.505 
+  - 7.588 
+  - 7.913
+  - 8.049
