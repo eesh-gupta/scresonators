@@ -1,8 +1,8 @@
 siliconta6_res1c2:
-  dir: [power_sweep_20250524_171954, power_sweep_20250525_184029]
+  dir: [power_sweep_20250524_171954/, power_sweep_20250525_184029/]
   meas: [silta6_res1c2, silta6_res1c3]
   pitch: [10, 12, 14, 2, 16, 4, 6, 8]
-  pth: [250518-ResSilTa1_cooldown2, 250518-ResSilTa1_cooldown2/warmup]
+  pth: [250518-ResSilTa1_cooldown2/, 250518-ResSilTa1_cooldown2/warmup/]
   target_freq: [6.08, 6.4, 6.76, 7.06, 7.09, 7.28, 7.64, 8.13]
 siliconta6_res2c2:
   dir: [power_sweep_combo/]
@@ -34,13 +34,9 @@ siliconta8_jpa:
   pitch: [6, 10, 16, 35, 4, 30, 3]
   pth: [20250728-ResSilTa-Aggron-JPA/]
   target_freq: [6.028, 6.378, 6.789, 7.505, 7.588, 7.913, 8.049]
-  max_photon: [3e7, 0.9e6, 5e9, 5e9, 5e9, 2e10, 2e10]
-  min_photon: [0.2, 1, 1, 1, 1, 0.2,0.2]
 siliconta8_slab:
   dir: [power_sweep_comb_atten, power_sweep_20250729_125835]
   meas: [silta8_slab]
   pitch: [6, 10, 16, 35, 4, 30]
   pth: [20250728-ResSilTa-Aggron-Slab/]
   target_freq: [6.028, 6.378, 6.789, 7.505, 7.588, 7.913]
-  max_photon: [1e8, 1.2e9, 8e8, 1.5e9, 2e9, 2e7]
-  min_photon: [1, 1, 1, 1, 1, 1]

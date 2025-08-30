@@ -360,7 +360,7 @@ def fit_qi2(
     if exclude is None:
         exclude = [None] * len(unique_resonators)
     if q_other_bounds is None:
-        q_other_bounds = np.array(len(unique_resonators) * bounds[1][1])
+        q_other_bounds = len(unique_resonators) * bounds[1][1]
 
     if len(unique_resonators) > 6:
         fig, axes = plt.subplots(3, 3, figsize=(10, 9))
@@ -567,6 +567,7 @@ def plot_res_pars(params_list, labs, base_pth, name=None):
         )
         ax[5].plot(params["pitch"], params["freqs"] / params["target_freq"] / 1e9, ".")
         ax[6].plot(params["pitch"], params["qother"] / params["qtls0"], ".")
+        ax[7].plot(params["pitch"], params["freqs"] / 1e9, ".")
         # ax[5].plot((params['pitch'],(params['pitch']), params['qi0']/params['qc'],params['qi_hi']/params['qc']), '.-', label=l, color=colors[i])
         # ax[5].plot(params['pitch'], params['qi_hi']/params['qc'], '.', label=l, color=colors[i])
 
@@ -588,7 +589,8 @@ def plot_res_pars(params_list, labs, base_pth, name=None):
     ax[4].set_ylabel("$\\beta$")
     ax[3].set_ylabel("$n_c$")
     ax[5].set_ylabel("Frequency/Target frequency")
-    ax[6].set_ylabel("$Q_{other}/Q_{TLS}$")
+    ax[6].set_ylabel("$Q_{\mathrm{other}}/Q_{\mathrm{TLS}}$")
+    ax[7].set_ylabel("Frequency (GHz)")
     for a in ax:
         a.set_xlabel("Gap width ($\mu$m)")
     fig.tight_layout()
