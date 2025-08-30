@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -70,11 +70,6 @@ Issues = "https://github.com/Boulder-Cryogenic-Quantum-Testbed/scresonators/issu
 
 [tool.setuptools]
 packages = ["scresonators", "scresonators.fit_resonator", "scresonators.measurement", "scresonators.plotting"]
-
-[tool.setuptools.package-dir]
-"scresonators.fit_resonator" = "fit_resonator"
-"scresonators.measurement" = "measurement"
-"scresonators.plotting" = "plotting"
 
 [tool.black]
 line-length = 88
