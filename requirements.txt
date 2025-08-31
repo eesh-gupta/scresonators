@@ -17,4 +17,3 @@ pyvisa-py>=0.5.0
 # Optional: Jupyter notebook support (commonly used with this type of package)
 jupyter>=1.0.0
 ipykernel>=6.0.0
-pyyaml>=5.0.0
