@@ -70,6 +70,7 @@ Issues = "https://github.com/Boulder-Cryogenic-Quantum-Testbed/scresonators/issu
 
 [tool.setuptools]
 packages = ["scresonators", "scresonators.fit_resonator", "scresonators.measurement", "scresonators.plotting"]
+package-dir = {"scresonators" = ".", "scresonators.fit_resonator" = "fit_resonator", "scresonators.measurement" = "measurement", "scresonators.plotting" = "plotting"}
 
 [tool.black]
 line-length = 88
