@@ -5,8 +5,8 @@ import datetime
 import csv
 import copy
 from scipy.optimize import curve_fit
-from scresonators.fit_resonator import ana_tls
-from scresonators.fit_resonator.ana_resonator import ResonatorFitter
+from scresonators.fitting import ana_tls
+from scresonators.fitting.ana_resonator import ResonatorFitter
 from scresonators.fit_resonator.ana_resonator import ResonatorData
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
@@ -284,13 +284,22 @@ def _should_stop_measuring(result, freq_idx, next_time):
     else:
         thresh = [0.05, 0.015, -0.0, -0.02]
         times = [500, 800, 1200, 1800, 3600]
-    times = 6*np.array(times)
-    
+    times = 6 * np.array(times)
+
     return (
         (result.q_adjustment_factors[freq_idx] > 1 - thresh[3] and next_time > times[0])
-        or (result.q_adjustment_factors[freq_idx] > 1 - thresh[2] and next_time > times[1])
-        or (result.q_adjustment_factors[freq_idx] > 1 - thresh[1] and next_time > times[2])
-        or (result.q_adjustment_factors[freq_idx] > 1 - thresh[0] and next_time > times[3])
+        or (
+            result.q_adjustment_factors[freq_idx] > 1 - thresh[2]
+            and next_time > times[1]
+        )
+        or (
+            result.q_adjustment_factors[freq_idx] > 1 - thresh[1]
+            and next_time > times[2]
+        )
+        or (
+            result.q_adjustment_factors[freq_idx] > 1 - thresh[0]
+            and next_time > times[3]
+        )
         or next_time > times[4]
     )
 
@@ -440,7 +449,7 @@ def power_sweep_v2(config, hw):
             )
 
             # Configure VNA scan for this power point
-            if config['type']=='linear':
+            if config["type"] == "linear":
                 min_avg = 10
             else:
                 min_avg = 30
@@ -454,7 +463,7 @@ def power_sweep_v2(config, hw):
                 "kappa": measurement.kappa / 1e6,
                 "slope": config["slope"],
             }
-            print(scan_config['freq_center'])
+            print(scan_config["freq_center"])
 
             config["pin"] = (
                 power
@@ -465,17 +474,33 @@ def power_sweep_v2(config, hw):
 
             # Perform the VNA scan
             tstart = datetime.datetime.now()
-            time_expected = (1 / scan_config["bandwidth"] * npoints * scan_config["averages"])
+            time_expected = (
+                1 / scan_config["bandwidth"] * npoints * scan_config["averages"]
+            )
 
             file_name = f"res_{fname}_{power:.0f}dbm.h5"
             data = _perform_scan(hw, file_name, expt_path, scan_config, config)
 
             elapsed_time = (datetime.datetime.now() - tstart).total_seconds()
-            print( f"Time elapsed: {elapsed_time / 60:.2f} min, expected time: {time_expected / 60:.2f} min")
+            print(
+                f"Time elapsed: {elapsed_time / 60:.2f} min, expected time: {time_expected / 60:.2f} min"
+            )
 
-            result.current_frequencies[freq_idx] = data["freqs"][np.argmin(data["amps"])]
+            result.current_frequencies[freq_idx] = data["freqs"][
+                np.argmin(data["amps"])
+            ]
 
-            measurement=_perform_fits(power_idx, freq_idx, result, data, power, prev_fit_params, expt_path, fname, config)
+            measurement = _perform_fits(
+                power_idx,
+                freq_idx,
+                result,
+                data,
+                power,
+                prev_fit_params,
+                expt_path,
+                fname,
+                config,
+            )
 
             # Store the measurement
             result.measurements[freq_idx][power_idx] = measurement
@@ -491,7 +516,11 @@ def power_sweep_v2(config, hw):
                 result.q_adjustment_factors[freq_idx] = measurement.q_total / prev_q
 
             if "avg_corr" in config:
-                tau_prop = (10 ** (-measurement.power_at_device / 10)* (measurement.q_coupling_amp / measurement.q_total_amp) ** 2* 1e-11)
+                tau_prop = (
+                    10 ** (-measurement.power_at_device / 10)
+                    * (measurement.q_coupling_amp / measurement.q_total_amp) ** 2
+                    * 1e-11
+                )
                 print(f"Averaging factor: {tau_prop:.3f}")
 
                 result.averaging_factors[freq_idx] = np.round(
@@ -505,11 +534,15 @@ def power_sweep_v2(config, hw):
 
             # Determine if we should continue measuring this frequency
             next_time = _calculate_next_measurement_time(config, result, freq_idx)
-            print(f"Next time: {next_time / 60:.2f} min, q_adj: {result.q_adjustment_factors[freq_idx]:.3f}")
+            print(
+                f"Next time: {next_time / 60:.2f} min, q_adj: {result.q_adjustment_factors[freq_idx]:.3f}"
+            )
 
             if _should_stop_measuring(result, freq_idx, next_time):
                 result.keep_measuring[freq_idx] = False
-                print(f"Stopping frequency {result.current_frequencies[freq_idx] / 1e9:.5f} GHz")
+                print(
+                    f"Stopping frequency {result.current_frequencies[freq_idx] / 1e9:.5f} GHz"
+                )
 
             # Update span for next measurement
             result.spans[freq_idx] = measurement.kappa * config["span_inc"]
@@ -553,11 +586,9 @@ def _plot_qi_vs_photon(measurements, freq_idx, expt_path):
     fig, ax = plt.subplots(1, 2, figsize=(8, 3))
 
     # Plot Qi vs photon number
-    #ax[0].semilogx(photon_numbers, qi_values, "o-", label="Primary fit")
+    # ax[0].semilogx(photon_numbers, qi_values, "o-", label="Primary fit")
     if qi_values:
-        ax[0].semilogx(
-            photon_numbers[: len(qi_values)], qi_values, "s--", label="Fit"
-        )
+        ax[0].semilogx(photon_numbers[: len(qi_values)], qi_values, "s--", label="Fit")
 
     # Fit Qi vs power to an exponential if we have enough points
     if len(qi_values_amp) > 6:
@@ -567,7 +598,7 @@ def _plot_qi_vs_photon(measurements, freq_idx, expt_path):
                 n, 0.04, min_freq, Qtls0, Qoth, nc, beta
             )
             p = [np.min(qi_values), np.max(qi_values), 3, 0.4]
-            #print(p)
+            # print(p)
             p, err = curve_fit(q_fitn, photon_numbers, qi_values, p0=p)
             ax[0].plot(
                 photon_numbers,
@@ -624,9 +655,9 @@ def _plot_qi_vs_photon(measurements, freq_idx, expt_path):
     sns.set_palette("crest", npl)
     fig, ax = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
     for i, d in enumerate(np.arange(npl)):
-        mf = np.mean(measurements[freq_idx][0].raw_data['freqs'])
+        mf = np.mean(measurements[freq_idx][0].raw_data["freqs"])
         d = measurements[freq_idx][i].raw_data
-        f = (d["freqs"] - mf) /1e3
+        f = (d["freqs"] - mf) / 1e3
         y = d["amps"]  # -np.max(d['amps'])
         ax[0].plot(f, y, label=f"{i}")
         ax[1].plot(f, d["phases"] - np.mean(d["phases"]), label=f"{i}")
@@ -685,7 +716,13 @@ def _save_fit_to_csv(measurement, freq_idx, power_idx, expt_path):
         # Add error parameters to header if available
         if measurement.q_internal_err is not None:
             header.extend(
-                ["q_internal_err", "q_total_err", "q_coupling_err", "frequency_err", "phase_err"]
+                [
+                    "q_internal_err",
+                    "q_total_err",
+                    "q_coupling_err",
+                    "frequency_err",
+                    "phase_err",
+                ]
             )
 
     # Create data row
@@ -802,24 +839,29 @@ def get_default_power_sweep_config(custom_config=None):
     return default_config
 
 
-def write_hp_csv(results, config): 
+def write_hp_csv(results, config):
     qhp_list = []
     for i in range(len(results.measurements)):
-        q_int = [results.measurements[i][j].q_internal for j in range(len(results.measurements[i]))]
+        q_int = [
+            results.measurements[i][j].q_internal
+            for j in range(len(results.measurements[i]))
+        ]
         qhp = np.max(q_int)
         qhp_list.append(np.round(qhp))
 
-    fname = os.path.join(config['base_path'], 'qhp.csv')
-    with open(fname, mode='a', newline='') as file:
+    fname = os.path.join(config["base_path"], "qhp.csv")
+    with open(fname, mode="a", newline="") as file:
         writer = csv.writer(file)
-        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         writer.writerow([now] + qhp_list)
 
+
 def new_hp_csv(path):
-    fname = os.path.join(path, 'qhp.csv')
-    with open(fname, mode='w', newline='') as file:
+    fname = os.path.join(path, "qhp.csv")
+    with open(fname, mode="w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(['Timestamp', '10','12','14','2','16','4','6','8']) 
+        writer.writerow(["Timestamp", "10", "12", "14", "2", "16", "4", "6", "8"])
+
 
 def _perform_fits(
     power_idx, freq_idx, result, data, power, prev_fit_params, expt_path, fname, config
@@ -858,7 +900,7 @@ def _perform_fits(
             np.max(10 ** (data["amps"] / 20)),
         ]
         freq_center, q_total_amp, kappa, fit_params = fit_resonator(
-            data, power, fitparams, [qc_best,phase_best]
+            data, power, fitparams, [qc_best, phase_best]
         )
         q_coupling_amp = qc_best
         phase_amp = phase_best
@@ -901,7 +943,7 @@ def _perform_fits(
     except Exception as e:
         print(f"Alternative fit failed: {str(e)}")
         q_total = q_coupling = freq = q_internal = None
-        phase_err =phase = qi_err = qc_err = f_err = q_err = None
+        phase_err = phase = qi_err = qc_err = f_err = q_err = None
 
         # Calculate photon number
     pin = (
@@ -910,7 +952,7 @@ def _perform_fits(
         - config["db_slope"] * (freq_center / 1e9 - config["freq_0"])
     )
 
-    if config['type']=='linear':
+    if config["type"] == "linear":
         min_avg = 10
     else:
         min_avg = 30

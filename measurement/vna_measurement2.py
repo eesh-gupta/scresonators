@@ -6,8 +6,8 @@ import scresonators.measurement.fitting as fitter
 
 import copy
 from scipy.optimize import curve_fit
-from scresonators.fit_resonator import ana_tls
-from scresonators.fit_resonator.ana_resonator import ResonatorFitter
+from scresonators.fitting import ana_tls
+from scresonators.fitting.ana_resonator import ResonatorFitter
 from scresonators.fit_resonator.ana_resonator import ResonatorData
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional

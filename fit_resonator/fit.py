@@ -1,3 +1,4 @@
+# Original code from Boulder
 import lmfit
 import scipy.optimize as spopt
 from scipy.ndimage import gaussian_filter1d

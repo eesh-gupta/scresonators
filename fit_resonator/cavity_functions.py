@@ -1,3 +1,4 @@
+# Original Code from Boulder
 """Analytic fit functions"""
 import numpy as np
 
