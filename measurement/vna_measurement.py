@@ -5,14 +5,15 @@ import datetime
 import csv
 import copy
 from scipy.optimize import curve_fit
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Optional
+import seaborn as sns
+
+from scresonators.fit_resonator.basic_fit import fit_resonator
 from scresonators.fitting import ana_tls
 from scresonators.fitting.ana_resonator import ResonatorFitter
 from scresonators.fit_resonator.ana_resonator import ResonatorData
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
 from scresonators.measurement.helpers import n, config_figs
-import seaborn as sns
-from scresonators.fit_resonator.basic_fit import fit_resonator
 
 
 @dataclass

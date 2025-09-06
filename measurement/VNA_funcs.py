@@ -1,13 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
-
 import os
-import json
-import datetime
 from time import *
 
-from scresonators.measurement.ZNB import ZNB20
+# from scresonators.measurement.ZNB import ZNB20
 
 
 ## ------------------

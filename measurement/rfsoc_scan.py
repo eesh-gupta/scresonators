@@ -1,7 +1,8 @@
 import numpy as np
-import slab_qick_calib.experiments as meas
 import os
 import copy
+
+import slab_qick_calib.experiments as meas
 
 
 def do_rfsoc_scan(hw, file_name, expt_path, scan_config, config, att=0, plot=False):

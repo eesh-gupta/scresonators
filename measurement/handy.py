@@ -1,9 +1,9 @@
-from scresonators.measurement.datamanagement import SlabFile
 import re
-import json
 import numpy as np
 import yaml
 import os
+
+from scresonators.measurement.datamanagement import SlabFile
 
 """Reopen saved data"""
 
