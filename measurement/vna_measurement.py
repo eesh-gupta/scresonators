@@ -258,7 +258,7 @@ def _determine_scan_parameters(config, result, freq_idx, power_idx):
         return config["npoints"], result.spans[freq_idx]
 
 
-def _should_stop_measuring(result, freq_idx, next_time):
+def _should_stop_measuring(result, freq_idx, next_time, low_qother=False, coef=1):
     """
     Determine if we should stop measuring a frequency.
 
@@ -278,29 +278,19 @@ def _should_stop_measuring(result, freq_idx, next_time):
     """
     # print(result.q_adjustment_factors[freq_idx])
     # print(next_time)
-    low_qother = False
     if low_qother:
-        thresh = [0.02, 0.005, -0.05, -0.15]
-        times = [500, 800, 1200, 1800]
-    else:
-        thresh = [0.05, 0.015, -0.0, -0.02]
+        thresh = [0.98, 0.995, 1.05, 1.15]
         times = [500, 800, 1200, 1800, 3600]
-    times = 6 * np.array(times)
+    else:
+        thresh = [0.95, 0.985, 1.0, 1.02]
+        times = [500, 800, 1200, 1800, 3600]
+    times = coef * np.array(times)
 
     return (
-        (result.q_adjustment_factors[freq_idx] > 1 - thresh[3] and next_time > times[0])
-        or (
-            result.q_adjustment_factors[freq_idx] > 1 - thresh[2]
-            and next_time > times[1]
-        )
-        or (
-            result.q_adjustment_factors[freq_idx] > 1 - thresh[1]
-            and next_time > times[2]
-        )
-        or (
-            result.q_adjustment_factors[freq_idx] > 1 - thresh[0]
-            and next_time > times[3]
-        )
+        (result.q_adjustment_factors[freq_idx] > thresh[3] and next_time > times[0])
+        or (result.q_adjustment_factors[freq_idx] > thresh[2] and next_time > times[1])
+        or (result.q_adjustment_factors[freq_idx] > thresh[1] and next_time > times[2])
+        or (result.q_adjustment_factors[freq_idx] > thresh[0] and next_time > times[3])
         or next_time > times[4]
     )
 
@@ -362,6 +352,7 @@ def power_sweep_v2(config, hw):
     expt_path = os.path.join(config["base_path"], config["folder"])
     try:
         os.makedirs(expt_path)
+        os.makedirs(os.path.join(expt_path, "fits"))
     except FileExistsError:
         pass
     except Exception as e:
@@ -379,7 +370,11 @@ def power_sweep_v2(config, hw):
             print(f"Error saving comment to file: {str(e)}")
 
     # Generate power values to sweep
-    powers = np.arange(0, config["nvals"]) * config["pow_inc"] + config["pow_start"]
+    powers = (
+        np.arange(0, config["nvals"]) * config["pow_inc"] + config["pow_start"][0]
+        if isinstance(config["pow_start"], list)
+        else config["pow_start"]
+    )
 
     # Create result object to track state
     result = PowerSweepResult(
@@ -399,6 +394,12 @@ def power_sweep_v2(config, hw):
     # Perform power sweep for each frequency
     for freq_idx, freq in enumerate(result.current_frequencies):
         result.measurements[freq_idx] = {}
+        powers = (
+            np.arange(0, config["nvals"]) * config["pow_inc"]
+            + config["pow_start"][freq_idx]
+            if isinstance(config["pow_start"], list)
+            else config["pow_start"]
+        )
 
         # Process each power point for this frequency
         for power_idx, power in enumerate(powers):
@@ -464,7 +465,6 @@ def power_sweep_v2(config, hw):
                 "kappa": measurement.kappa / 1e6,
                 "slope": config["slope"],
             }
-            print(scan_config["freq_center"])
 
             config["pin"] = (
                 power
@@ -909,9 +909,11 @@ def _perform_fits(
     # Perform circle fitting
     try:
         data = ResonatorData.fit_phase(data)
+        pth = os.path.join(expt_path, "fits")
         if power_idx < 100:
+
             output = ResonatorFitter.fit_resonator(
-                data, fname, expt_path, plot=True, fix_freq=False
+                data, fname, pth, plot=True, fix_freq=False
             )
         else:
             qc_values = [
@@ -923,7 +925,7 @@ def _perform_fits(
             output = ResonatorFitter.fit_resonator(
                 data,
                 fname,
-                expt_path,
+                pth,
                 plot=True,
                 fix_freq=False,
                 fit_Qc=False,

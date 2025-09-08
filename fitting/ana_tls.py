@@ -346,156 +346,256 @@ def fit_qi2(
         max_photon_vec (list, optional): Vector of maximum photon numbers for fitting.
         name (str, optional): Name for the output plot file.
         bounds (tuple, optional): Bounds for the curve fitting.
-        use_gamma (bool, optional): If True, fits 1/Qi instead of Qi. Defaults to False.
+        q_other_bounds: Upper bounds for Q_other parameter per resonator
+        use_gamma (bool, optional): If True, fits 1/Qi instead of Qi.
+        exclude: Indices to exclude for each resonator
+        show_all: Show all data points or just fit range
+        wide: Extend fit line beyond data range
 
     Returns:
         dict: A dictionary containing the fitted parameters and other metadata.
     """
     plt.rcParams["lines.markersize"] = 6
-    unique_resonators = (
-        res_params["resonator_id"].unique()
-        if "resonator_id" in res_params.columns
-        else [0]
-    )
+
+    # Validate input data
+    required_cols = ["photon_number", "frequency_Hz", "q_internal", "q_internal_err"]
+    missing_cols = [col for col in required_cols if col not in res_params.columns]
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {missing_cols}")
+
+    # Add resonator_id if not present
+    if "resonator_id" not in res_params.columns:
+        res_params = res_params.copy()
+        res_params["resonator_id"] = 0
+
+    unique_resonators = res_params["resonator_id"].unique()
     if exclude is None:
         exclude = [None] * len(unique_resonators)
     if q_other_bounds is None:
-        q_other_bounds = len(unique_resonators) * bounds[1][1]
+        q_other_bounds = [bounds[1][1]] * len(unique_resonators)
 
-    if len(unique_resonators) > 6:
+    # Configure subplot layout
+    if len(unique_resonators) <= 6:
+        fig, axes = plt.subplots(2, 3, figsize=(10, 7))
+    elif len(unique_resonators) <= 9:
         fig, axes = plt.subplots(3, 3, figsize=(10, 9))
     else:
-        fig, axes = plt.subplots(2, 3, figsize=(10, 7))
+        fig, axes = plt.subplots(4, 3, figsize=(12, 10))
     axes = axes.flatten()
 
-    results = {
-        "params": [],
-        "errors": [],
-        "qi0": [],
-        "qi_hi": [],
-        "nn_min": [],
-        "nn_max": [],
-        "qc": [],
-        "qc_err": [],
-        "freqs": [],
-        "pitch": [],
-        "target_freq": [],
-    }
-
+    # Process each resonator
+    fit_results = []
     for i, res_id in enumerate(unique_resonators):
         if i >= len(axes):
             break
 
-        res_data = (
-            res_params[res_params["resonator_id"] == res_id]
-            if "resonator_id" in res_params.columns
-            else res_params
-        )
+        # Get data for this resonator
+        res_data = res_params[res_params["resonator_id"] == res_id].copy()
         res_data = res_data.sort_values(by="photon_number")
 
+        # Extract parameters
         nn = res_data["photon_number"].values
         freq = res_data["frequency_Hz"].iloc[0]
-        temp = (
-            res_data["temp"].iloc[0] if "temp" in res_data.columns else 20e-3
-        )  # Default temp
+        temp = res_data["temp"].iloc[0] if "temp" in res_data.columns else 20e-3
+        pitch = res_data["pitch"].iloc[0] if "pitch" in res_data.columns else ""
 
-        mask = photon_mask(nn, min_photon_vec, max_photon_vec, i, exclude[i])
-        nn_fit, qi_fit, qi_err = (
-            nn[mask],
-            res_data["q_internal"].values[mask],
-            res_data["q_internal_err"].values[mask],
-        )
+        # Apply filtering
+        mask = _create_photon_mask(nn, min_photon_vec, max_photon_vec, i, exclude[i])
+        nn_fit = nn[mask]
+        qi_fit = res_data["q_internal"].values[mask]
+        qi_err = res_data["q_internal_err"].values[mask]
 
-        fit_func = (
-            (
-                lambda n, Qtls0, Qoth, nc, beta: Gamma_tot(
-                    n, temp, freq, Qtls0, Qoth, nc, beta
-                )
+        if len(nn_fit) < 4:
+            print(f"Warning: Insufficient data points for resonator {res_id}")
+            continue
+
+        # Create fit function
+        if use_gamma:
+            fit_func = lambda n, Qtls0, Qoth, nc, beta: Gamma_tot(
+                n, temp, freq, Qtls0, Qoth, nc, beta
             )
-            if use_gamma
-            else (
-                lambda n, Qtls0, Qoth, nc, beta: Qtotn(
-                    n, temp, freq, Qtls0, Qoth, nc, beta
-                )
+            y_data = 1 / qi_fit
+            y_sigma = qi_err / qi_fit**2
+        else:
+            fit_func = lambda n, Qtls0, Qoth, nc, beta: Qtotn(
+                n, temp, freq, Qtls0, Qoth, nc, beta
             )
+            y_data = qi_fit
+            y_sigma = qi_err
+
+        # Fit the data
+        fit_bounds = (bounds[0][:], bounds[1][:])  # Copy bounds
+        if i < len(q_other_bounds):
+            fit_bounds[1][1] = q_other_bounds[i]
+
+        p, err = _fit_qi_model(nn_fit, y_data, y_sigma, fit_func, fit_bounds)
+
+        # Store results
+        qi_at_zero = 1 / fit_func(0, *p) if use_gamma else fit_func(0, *p)
+        fit_results.append(
+            {
+                "params": p,
+                "errors": err,
+                "qi0": qi_at_zero,
+                "qi_hi": np.max(qi_fit),
+                "nn_min": np.min(nn),
+                "nn_max": np.max(nn),
+                "qc": (
+                    np.nanmedian(res_data["q_coupling"].values)
+                    if "q_coupling" in res_data.columns
+                    else np.nan
+                ),
+                "qc_err": (
+                    np.nanmedian(res_data["q_coupling_err"].values)
+                    if "q_coupling_err" in res_data.columns
+                    else np.nan
+                ),
+                "freq": freq,
+                "pitch": pitch,
+                "target_freq": (
+                    res_data["target_freq"].iloc[0]
+                    if "target_freq" in res_data.columns
+                    else np.nan
+                ),
+            }
         )
-        Qtls_func = lambda n, Qtls0, nc, beta: Qtls(n, temp, freq, Qtls0, nc, beta)
 
-        y_data_fit = 1 / qi_fit if use_gamma else qi_fit
-        y_sigma_fit = qi_err / qi_fit**2 if use_gamma else qi_err
-
-        bounds[1][1] = q_other_bounds[i]
-        p, err = _fit_qi_model(nn_fit, y_data_fit, y_sigma_fit, fit_func, bounds)
-
-        results["params"].append(p)
-        results["errors"].append(err)
-        results["qi0"].append(1 / fit_func(0, *p) if use_gamma else fit_func(0, *p))
-        results["qi_hi"].append(np.max(qi_fit))
-        results["nn_min"].append(np.min(nn))
-        results["nn_max"].append(np.max(nn))
-        results["qc"].append(np.nanmedian(res_data["q_coupling"].values))
-        results["qc_err"].append(np.nanmedian(res_data["q_coupling_err"].values))
-        results["freqs"].append(np.nanmedian(res_data["frequency_Hz"].values))
-        results["pitch"].append(
-            res_data["pitch"].iloc[0] if "pitch" in res_data.columns else ""
-        )
-        results["target_freq"].append(
-            res_data["target_freq"].iloc[0] if "target_freq" in res_data.columns else ""
-        )
-
-        pitch_label = res_data["pitch"].iloc[0] if "pitch" in res_data.columns else ""
-        _plot_qi_fit(
+        # Plot the fit
+        _plot_qi_fit_improved(
             axes[i],
+            nn,
             nn_fit,
             qi_fit,
             qi_err,
             p,
             fit_func,
+            temp,
+            freq,
             use_gamma,
-            pitch_label,
-            nn,
-            res_data["q_internal"].values,
-            show_all=show_all,
-            wide=wide,
-            Qtls_func=Qtls_func,
+            pitch,
+            show_all,
+            wide,
         )
 
-    for ax in axes:
+    # Hide unused subplots
+    for i in range(len(fit_results), len(axes)):
+        axes[i].set_visible(False)
+
+    # Finalize plot
+    for ax in axes[: len(fit_results)]:
         ax.set_xlabel(r"$\langle n \rangle$")
-        ax.set_ylabel(r"$Q_i \: (10^6)$")
+        ax.set_ylabel(r"$\Gamma \: (\mu s^{-1})$" if use_gamma else r"$Q_i \: (10^6)$")
+        ax.set_xscale("log")
 
     fig.tight_layout()
-    if name:
+    if name and base_pth:
         try:
             fig.savefig(f"{base_pth}{name}_qi.png", dpi=300)
         except Exception as e:
             print(f"Failed to save figure: {e}")
 
-    # Finalize results dictionary
-    final_results = {
-        "qtls0": np.array([p[0] for p in results["params"]]),
-        "qother": np.array([p[1] for p in results["params"]]),
-        "nc": np.array([p[2] for p in results["params"]]),
-        "beta": np.array([p[3] for p in results["params"]]),
-        "qtls0_err": np.array([e[0] for e in results["errors"]]),
-        "qother_err": np.array([e[1] for e in results["errors"]]),
-        "nc_err": np.array([e[2] for e in results["errors"]]),
-        "beta_err": np.array([e[3] for e in results["errors"]]),
+    # Format results for backward compatibility
+    return {
+        "qtls0": np.array([r["params"][0] for r in fit_results]),
+        "qother": np.array([r["params"][1] for r in fit_results]),
+        "nc": np.array([r["params"][2] for r in fit_results]),
+        "beta": np.array([r["params"][3] for r in fit_results]),
+        "qtls0_err": np.array([r["errors"][0] for r in fit_results]),
+        "qother_err": np.array([r["errors"][1] for r in fit_results]),
+        "nc_err": np.array([r["errors"][2] for r in fit_results]),
+        "beta_err": np.array([r["errors"][3] for r in fit_results]),
+        "qi0": np.array([r["qi0"] for r in fit_results]),
+        "qi_hi": np.array([r["qi_hi"] for r in fit_results]),
+        "nn_min": np.array([r["nn_min"] for r in fit_results]),
+        "nn_max": np.array([r["nn_max"] for r in fit_results]),
+        "qc": np.array([r["qc"] for r in fit_results]),
+        "qc_err": np.array([r["qc_err"] for r in fit_results]),
+        "freqs": np.array([r["freq"] for r in fit_results]),
+        "pitch": np.array([r["pitch"] for r in fit_results]),
+        "target_freq": np.array([r["target_freq"] for r in fit_results]),
     }
-    for key in [
-        "qi0",
-        "qi_hi",
-        "nn_min",
-        "nn_max",
-        "qc",
-        "qc_err",
-        "freqs",
-        "pitch",
-        "target_freq",
-    ]:
-        final_results[key] = np.array(results[key])
 
-    return final_results
+
+def _create_photon_mask(nn, min_photon_vec, max_photon_vec, i, exclude):
+    """Create boolean mask for filtering photon number data."""
+    mask = np.ones(len(nn), dtype=bool)
+
+    # Apply min/max photon filters
+    if min_photon_vec is not None and i < len(min_photon_vec):
+        mask &= nn >= min_photon_vec[i]
+    if max_photon_vec is not None and i < len(max_photon_vec):
+        mask &= nn <= max_photon_vec[i]
+
+    # Apply exclusions
+    if exclude is not None and len(exclude) > 0:
+        exclude = np.array(exclude)
+        exclude = exclude[exclude < len(mask)]
+        mask[exclude] = False
+
+    return mask
+
+
+def _plot_qi_fit_improved(
+    ax,
+    nn_all,
+    nn_fit,
+    qi_fit,
+    qi_err,
+    fit_params,
+    fit_func,
+    temp,
+    freq,
+    use_gamma,
+    pitch,
+    show_all=True,
+    wide=False,
+    tls=False,
+):
+    """Plot quality factor fit results."""
+    # Generate fit line
+    if wide:
+        nn_line = np.logspace(
+            np.log10(np.min(nn_fit) * 0.1), np.log10(10 * np.max(nn_fit)), 350
+        )
+    else:
+        nn_line = np.logspace(np.log10(np.min(nn_fit)), np.log10(np.max(nn_fit)), 300)
+
+    # Plot data and fit
+    if use_gamma:
+        y_data = 1 / (qi_fit / 1e6)
+        y_err = qi_err / qi_fit**2 * 1e6
+        fit_line = fit_func(nn_line, *fit_params) * 1e6
+        ax.errorbar(nn_fit, y_data, yerr=y_err, fmt=".", color=colors[1])
+        ax.axhline(1 / (fit_params[1] / 1e6), color="gray", linestyle="--", alpha=0.7)
+    else:
+        y_data = qi_fit / 1e6
+        y_err = qi_err / 1e6
+        fit_line = fit_func(nn_line, *fit_params) / 1e6
+        ax.errorbar(nn_fit, y_data, yerr=y_err, fmt=".", color=colors[1])
+        if tls:
+            tls_line = (
+                Qtls(nn_line, temp, freq, fit_params[0], fit_params[2], fit_params[3])
+                / 1e6
+            )
+            ax.semilogx(
+                nn_line, tls_line, "--", color=colors[2], alpha=0.7, label="TLS only"
+            )
+
+        ax.axhline(fit_params[1] / 1e6, color="gray", linestyle="--", alpha=0.7)
+
+    ax.semilogx(nn_line, fit_line, "-", color=colors[0], linewidth=2)
+
+    # Add label
+    ax.text(
+        0.1,
+        0.9,
+        f"{pitch} µm" if pitch else f"Res",
+        transform=ax.transAxes,
+        fontsize=12,
+        va="top",
+        ha="left",
+        bbox=dict(facecolor="white", edgecolor="black", alpha=0.8),
+    )
 
 
 def photon_mask(nn, min_photon_vec, max_photon_vec, i, exclude=None):

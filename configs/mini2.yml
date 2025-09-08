@@ -50,4 +50,3 @@ siliconta9a:
   pitch: [6, 10, 16, 35, 30]
   pth: [250829-ResSilTaCopper]
   target_freq: [6.028, 6.378, 6.789, 7.505, 7.913]
-  min_photon: [1, 1, 1, 1, 1, 1]
