@@ -279,8 +279,8 @@ def _should_stop_measuring(result, freq_idx, next_time, low_qother=False, coef=1
     # print(result.q_adjustment_factors[freq_idx])
     # print(next_time)
     if low_qother:
-        thresh = [0.98, 0.995, 1.05, 1.15]
-        times = [500, 800, 1200, 1800, 3600]
+        thresh = [0.99, 0.995, 1.05, 1.15]
+        times = [600, 900, 1200, 1800, 3600]
     else:
         thresh = [0.95, 0.985, 1.0, 1.02]
         times = [500, 800, 1200, 1800, 3600]
@@ -507,7 +507,14 @@ def power_sweep_v2(config, hw):
             result.measurements[freq_idx][power_idx] = measurement
 
             # Save fit parameters to CSV
-            _save_fit_to_csv(measurement, freq_idx, power_idx, expt_path)
+            _save_fit_to_csv(
+                measurement,
+                freq_idx,
+                power_idx,
+                expt_path,
+                low_qother=config["low_qother"],
+                coef=config["time_coef"],
+            )
 
             # Plot Qi vs power
             _plot_qi_vs_photon(result.measurements, freq_idx, expt_path)
@@ -553,7 +560,7 @@ def power_sweep_v2(config, hw):
 
 def _plot_qi_vs_photon(measurements, freq_idx, expt_path):
     """
-    Plot internal quality factor vs photon number.
+    Plot internal quality factor vs photon number with error bars.
 
     Parameters:
     -----------
@@ -575,21 +582,48 @@ def _plot_qi_vs_photon(measurements, freq_idx, expt_path):
     qi_values_amp = [measurements[freq_idx][i].q_internal_amp for i in power_indices]
     qc_values_amp = [measurements[freq_idx][i].q_coupling_amp for i in power_indices]
 
-    # Get alternative fit data if available
+    # Get alternative fit data and errors if available
     qi_values = []
     qc_values = []
+    qi_errors = []
+    qc_errors = []
+
     for i in power_indices:
         if measurements[freq_idx][i].q_internal is not None:
             qi_values.append(measurements[freq_idx][i].q_internal)
             qc_values.append(measurements[freq_idx][i].q_coupling)
 
+            # Get error values, default to None if not available
+            qi_err = measurements[freq_idx][i].q_internal_err
+            qc_err = measurements[freq_idx][i].q_coupling_err
+            qi_errors.append(qi_err if qi_err is not None else 0)
+            qc_errors.append(qc_err if qc_err is not None else 0)
+
     # Create plot
     fig, ax = plt.subplots(1, 2, figsize=(8, 3))
 
-    # Plot Qi vs photon number
-    # ax[0].semilogx(photon_numbers, qi_values, "o-", label="Primary fit")
+    # Plot Qi vs photon number with error bars
     if qi_values:
-        ax[0].semilogx(photon_numbers[: len(qi_values)], qi_values, "s--", label="Fit")
+        # Check if we have meaningful error data
+        has_qi_errors = any(err > 0 for err in qi_errors)
+
+        if has_qi_errors:
+            ax[0].errorbar(
+                photon_numbers[: len(qi_values)],
+                qi_values,
+                yerr=qi_errors,
+                fmt="s--",
+                label="Circle fit",
+                capsize=3,
+                capthick=1,
+            )
+        else:
+            ax[0].semilogx(
+                photon_numbers[: len(qi_values)], qi_values, "s--", label="Circle fit"
+            )
+
+        ax[0].semilogx(photon_numbers, qi_values_amp, "o-", label="Amplitude fit")
+        ax[0].set_xscale("log")  # Ensure log scale is maintained after errorbar
 
     # Fit Qi vs power to an exponential if we have enough points
     if len(qi_values_amp) > 6:
@@ -637,11 +671,11 @@ def _plot_qi_vs_photon(measurements, freq_idx, expt_path):
     #     ax[0].legend()
 
     # Plot Qc vs photon number
-    ax[1].semilogx(photon_numbers, qc_values_amp, "o-", label="Primary fit")
     if qc_values:
         ax[1].semilogx(
-            photon_numbers[: len(qc_values)], qc_values, "s--", label="Alt fit"
+            photon_numbers[: len(qc_values)], qc_values, "s--", label="Circle fit"
         )
+        ax[1].semilogx(photon_numbers, qc_values_amp, "o-", label="Amplitude fit")
 
     ax[1].set_xlabel("Number of Photons")
     ax[1].set_ylabel("Coupling Quality Factor ($Q_c$)")
@@ -818,6 +852,8 @@ def get_default_power_sweep_config(custom_config=None):
         "averages": 1,  # Number of averages
         "att": 60,  # Attenuation in dB
         "type": "lin",
+        "low_qother": False,  # Use conservative stopping criteria for low Q_other
+        "time_coef": 1,  # Coefficient to adjust stopping time thresholds
         "freq_0": 6,
         "db_slope": 4,
         "spar": "S21",
