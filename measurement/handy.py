@@ -101,7 +101,7 @@ def get_params(yml_file, meas, pth=""):
 
     # data_pth = os.path.join(pth, "Data", params["pth"][ind], params["dir"][ind])
     # data_pth = pth + folder + "Data/" + params["pth"][ind]
-    data_pth = os.path.join(pth, "Data", params["pth"][ind])
+    data_pth = os.path.join(pth, params["pth"][ind])
     folder = params["dir"][ind]
     img_name = params["pth"][ind][0:-1] + params["meas"][ind]
     return params, data_pth, folder, img_name, ind

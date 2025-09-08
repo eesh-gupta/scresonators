@@ -124,13 +124,13 @@ def _perform_initial_scan(hw, expt_path, result, freq_idx, power, att, fname, co
     # Perform VNA scan
     file_name = f"res_{fname}_single.h5"
     if type(hw) is not dict:
-        import scresonators.measurement.vna_scan as vna_scan
+        import scresonators.drivers.vna_scan as vna_scan
 
         data = vna_scan.do_vna_scan(
             hw, file_name, expt_path, scan_config, config["spar"], att=att, plot=False
         )
     else:
-        from scresonators.measurement.rfsoc_scan import do_rfsoc_scan
+        from scresonators.drivers.rfsoc_scan import do_rfsoc_scan
 
         config = copy.deepcopy(config)
         config["phase_const"] = False
@@ -200,7 +200,7 @@ def _perform_scan(hw, file_name, expt_path, scan_config, config):
     """
 
     if not config["type"] == "rfsoc":
-        from scresonators.measurement.vna_scan import do_vna_scan_consolidated
+        from scresonators.drivers.vna_scan import do_vna_scan_consolidated
 
         if config["type"] == "lin":
             scan_type = "standard"
