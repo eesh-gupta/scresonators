@@ -85,7 +85,7 @@ def do_vna_scan_consolidated(
 
             # Configure VNA for standard scan
             VNA.initialize_one_tone_spectroscopy(
-                trace_name, scattering_parameter, spec_type="lin"
+                trace_name, scattering_parameter,# spec_type="lin"
             )
             VNA.set_startfrequency(freq_start)
             VNA.set_stopfrequency(freq_stop)
@@ -272,6 +272,7 @@ def do_vna_scan_consolidated(
 
         # Plot data if requested (common for all scan types)
         if plot:
+            return data
             plot_all(data, filepath=expt_path)
 
         return data

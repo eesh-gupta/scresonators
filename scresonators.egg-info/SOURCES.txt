@@ -18,6 +18,7 @@ dbs/qc.ipynb
 dbs/qc2.ipynb
 dbs/imgs/compare_qother.ipynb
 fit_resonator/__init__.py
+fit_resonator/ana_resonators.py
 fit_resonator/basic_fit.py
 fit_resonator/cavity_functions.py
 fit_resonator/check_data.py
